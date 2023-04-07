@@ -17,7 +17,7 @@ namespace ContainersRespawnPatcher
     public class Program
     {
         // Dictionaries of containers
-        internal static Dictionary<P2Int, ICell?> originalCellGrid = new();
+        internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> originalCellGrid = new();
         internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> tamrielCellGrids = new();
 
         public static Lazy<Settings> _settings = null!;
@@ -335,9 +335,8 @@ namespace ContainersRespawnPatcher
 
                 if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.WhiterunWorld.FormKey)) continue;
 
-
-                var cellState = cellContext.GetOrAddAsOverride(state.PatchMod);
-                originalCellGrid.TryAdd(cell.Grid.Point, cellState);
+                //var cellState = cellContext.GetOrAddAsOverride(state.PatchMod);
+                originalCellGrid.TryAdd(cell.Grid.Point, cellContext);
             }
             System.Console.WriteLine("WhiterunWorld mapped!");
 
@@ -350,10 +349,10 @@ namespace ContainersRespawnPatcher
 
                 // Ignore null 
                 if (cell is null || cell.Record is null || cell.Record.Grid is null) continue;
-                if (placed is null || placed.Record is null || placed.Record.EditorID is null) continue;
+                if (placed is null) continue;
 
 
-
+                // Get the parent worldspace
                 placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
                 if (parent is null || parent.Record is null || parent.Record.EditorID is null) continue;
 
@@ -363,13 +362,20 @@ namespace ContainersRespawnPatcher
 
 
                     System.Console.WriteLine("object in worldspace");
-                    if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCell)) continue;
-                    
-                    var tamriel = tamrielCell.GetOrAddAsOverride(state.PatchMod);
+                    if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
+                    if (!originalCellGrid.TryGetValue(cell.Record.Grid.Point, out var originalCellContext)) continue;
 
-                    originalCellGrid.TryGetValue(cell.Record.Grid.Point, out var original);
+                    var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                    var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
+
                     if (tamriel is null || original is null) continue;
 
+
+                    // Ignore occlusion planes
+                    if (placed.Record.Base.FormKey.Equals(Skyrim.Static.PlaneMarker))
+                    {
+                        continue;
+                    }
 
                     var placedState = placed.GetOrAddAsOverride(state.PatchMod);
 
@@ -377,15 +383,18 @@ namespace ContainersRespawnPatcher
                     {
                         original.Persistent.Remove(placedState);
                         tamriel.Persistent.Add(placedState);
-                        System.Console.WriteLine("object moved");
+                        System.Console.WriteLine("persistent object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
                     }
 
+                    // Move the temporary object to the Tamriel worldspace
                     if (original.Temporary.Contains(placedState))
                     {
                         original.Temporary.Remove(placedState);
                         tamriel.Temporary.Add(placedState);
-                        System.Console.WriteLine("object moved");
+                        System.Console.WriteLine("temporary object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
                     }
+
+
 
                     // Swap 
                     //var placedCopy = placed.GetOrAddAsOverride(state.PatchMod);
