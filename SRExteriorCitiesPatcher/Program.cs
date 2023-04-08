@@ -25,6 +25,16 @@ namespace ContainersRespawnPatcher
 
         internal static IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>? tamrielPersistentCellContext;
         internal static IFormLinkGetter<ICellGetter> tamrielPersistentCell = new FormLink<ICellGetter>(FormKey.Factory("000D74:Skyrim.esm"));
+        
+        private static readonly HashSet<ModKey> alreadyIncludedModKeys = new HashSet<ModKey>()
+        {
+            ModKey.FromNameAndExtension("Skyrim.esm"),
+            ModKey.FromNameAndExtension("Update.esm"),
+            ModKey.FromNameAndExtension("Dawnguard.esm"),
+            ModKey.FromNameAndExtension("Hearthfire.esm"),
+            ModKey.FromNameAndExtension("Dragonborn.esm"),
+            ModKey.FromNameAndExtension("SR Exterior Cities.esp")
+        };
 
         public static Lazy<Settings> _settings = null!;
         public static Settings Settings => _settings.Value;
@@ -130,6 +140,14 @@ namespace ContainersRespawnPatcher
             // Create a link cache
             ILinkCache cache = state.LinkCache;
 
+            List<FormKey> worldspacesToMove = new()
+            {
+                Skyrim.Worldspace.WhiterunWorld.FormKey,
+                Skyrim.Worldspace.SolitudeWorld.FormKey,
+                Skyrim.Worldspace.WindhelmWorld.FormKey,
+                Skyrim.Worldspace.RiftenWorld.FormKey,
+                Skyrim.Worldspace.MarkarthWorld.FormKey
+            };
 
             /// Map Tamriel cells 
             System.Console.WriteLine("Mapping Tamriel");
@@ -167,7 +185,7 @@ namespace ContainersRespawnPatcher
 
 
             /// Map WhiterunWorld cells
-            System.Console.WriteLine("Mapping WhiterunWorld");
+            System.Console.WriteLine("Mapping Worldspaces");
             foreach (var cellContext in state.LoadOrder.ListedOrder.Cell().WinningContextOverrides(cache))
             {
                 // Ignore null
@@ -180,12 +198,13 @@ namespace ContainersRespawnPatcher
                 if (cell.Grid is null) continue;
 
                 // Ignore if the parent worldspace is null or not WhiterunWorld 
-                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey)) continue;
+                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspacesToMove.Contains(worldspace.FormKey)) 
+                    continue;
 
                 originalCellGrid.TryAdd(new Tuple<P2Int, FormKey>(cell.Grid.Point, cell.FormKey), cellContext);
 
             }
-            System.Console.WriteLine("WhiterunWorld mapped!");
+            System.Console.WriteLine("Worldspaces mapped!");
 
 
             // Counter
@@ -216,10 +235,10 @@ namespace ContainersRespawnPatcher
                 placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
                 if (parent is null || parent.Record is null) continue;
 
-                // WhiterunWorld
-                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey)) 
+                // Object in worldspaces
+                if (worldspacesToMove.Contains(parent.Record.FormKey)) 
                 {
-                    if(Settings.debug)
+                    if (Settings.debug)
                         System.Console.WriteLine("Object found in worldspace!");
 
                     // Get the relevant cells
@@ -229,7 +248,6 @@ namespace ContainersRespawnPatcher
                     // Get the original 
                     var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
                     if (original is null) continue;
-
 
                     // Open/copy the PlacedObject in the patch mod
                     var placedState = placed.GetOrAddAsOverride(state.PatchMod);
@@ -264,7 +282,7 @@ namespace ContainersRespawnPatcher
                         // Remove from the original worldspace cell and move to the corresponding Tamriel cell
                         original.Temporary.Remove(placedState);
                         tamriel.Temporary.Add(placedState);
-                        tamriel.Location.SetTo(original.Location);
+                        //tamriel.Location.SetTo(original.Location);
 
                         // Count
                         nbTempTotal++;
@@ -297,8 +315,8 @@ namespace ContainersRespawnPatcher
                 placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
                 if (parent is null || parent.Record is null) continue;
 
-                // WhiterunWorld
-                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey))
+                // Worldspaces
+                if (worldspacesToMove.Contains(parent.Record.FormKey))
                 {
                     if (Settings.debug)
                         System.Console.WriteLine("NPC found in worldspace!");
@@ -345,7 +363,7 @@ namespace ContainersRespawnPatcher
                         // Remove from the original worldspace cell and move to the corresponding Tamriel cell
                         original.Temporary.Remove(placedState);
                         tamriel.Temporary.Add(placedState);
-                        tamriel.Location.SetTo(original.Location);
+                        //tamriel.Location.SetTo(original.Location);
 
                         // Count
                         nbTempTotal++;
@@ -358,6 +376,11 @@ namespace ContainersRespawnPatcher
             }
             System.Console.WriteLine("Moved " + nbTotal + " NPCs (" + nbPersistTotal + " peristent + " + nbTempTotal + " temporary NPCs)");
 
+
+            // Reset counters
+            nbTotal = 0;
+            nbTempTotal = 0;
+            nbPersistTotal = 0;
 
             /// Navmeshes
             foreach (var navmesh in state.LoadOrder.PriorityOrder.NavigationMesh().WinningContextOverrides(state.LinkCache))
@@ -373,14 +396,11 @@ namespace ContainersRespawnPatcher
                 navmesh.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
                 if (parent is null || parent.Record is null) continue;
 
-                // WhiterunWorld
-                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey))
+                // Worldspaces
+                if (worldspacesToMove.Contains(parent.Record.FormKey))
                 {
                     if (Settings.debug)
-                        System.Console.WriteLine("Navmesh found in worldspace!");
-
-                    if (Settings.debug)
-                        System.Console.WriteLine("Navmesh ID" + navmesh.Record.FormKey);
+                        System.Console.WriteLine("Navmesh found in worldspace: " + navmesh.Record.FormKey);
 
                     // Get the relevant cells
                     if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
@@ -396,79 +416,118 @@ namespace ContainersRespawnPatcher
                     var navmeshState = navmesh.GetOrAddAsOverride(state.PatchMod);
                     if (navmeshState is null) continue;
 
-                    var navcopy = navmeshState.Duplicate(state.PatchMod.GetNextFormKey());
 
-                    /*
-                    // Remove from the original worldspace cell and move to the corresponding Tamriel cell
-                    var orgnavmeshes = original.NavigationMeshes;
-                    IEnumerable<NavigationMesh> query =
-                        from nav in orgnavmeshes
-                        where nav.FormKey.Equals(navmesh.Record.FormKey)
-                        select nav;
-                    var navtoremove = query.FirstOrDefault();
-                    if (navtoremove is null) continue;
-
-                    var navcopy = navtoremove.Duplicate(state.PatchMod.GetNextFormKey());
-                    
-                    var nvmiCtx = state.LoadOrder.ListedOrder.NavigationMeshInfoMap().WinningContextOverrides().First();
-                    var nvmi = nvmiCtx.GetOrAddAsOverride(state.PatchMod);
-                    
-                    nvmi.MapInfos.Select(x =>
+                    // Make a copy of the navmesh and place it in the right worldspace
+                    if(Settings.copyNavmeshes)
                     {
-                        //if (!x.ParentWorldspace.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) return null;
-
-                        
-
-                        //if (x.ParentWorldspace.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey) || x.ParentCell.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey))
-                        //    System.Console.WriteLine("formkey... " + x.NavigationMesh.FormKey);
-
-                        if (x.NavigationMesh.FormKey.Equals(navmeshState.FormKey))
+                        var navcopy = navmeshState.Duplicate(state.PatchMod.GetNextFormKey());
+                        if (navcopy.Data is null || navcopy.Data.Parent is null || original.Grid is null)
                         {
-                            //System.Console.WriteLine("found nvmi");
-                            return x;
+                            // Do nothing
                         }
                         else
                         {
-                            return null;
+                            // Create a Navmesh parent object
+                            // WARNING: the Y comes first, then X!
+                            P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
+
+                            WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p, Parent = Skyrim.Worldspace.Tamriel };
+                            navcopy.Data.Parent = tamrielasaparent;
                         }
-                    }).ForEach(x =>
-                    {
-                        if (x is null) return;
 
-                        x.Parent = tamrielasaparent;
-                        //System.Console.WriteLine("parent: " + x.Parent.Print());
-                        //x.Parent.Clear();
-                        //System.Console.WriteLine("swapped parent to: " + Skyrim.Worldspace.Tamriel.FormKey);
-                    });*/
+                        // Add the copy to Tamriel
+                        tamriel.NavigationMeshes.Add(navcopy);
 
-                    if (navcopy.Data is null || navcopy.Data.Parent is null || original.Grid is null)
-                    {
+                        if (Settings.debug)
+                            System.Console.WriteLine("     Navmesh copied, copy placed in Tamriel");
                     }
+
+                    // Remove from the original worldspace cell and move to the corresponding Tamriel cell
                     else
                     {
-                        P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
+                        
+                        var orgnavmeshes = original.NavigationMeshes;
+                        IEnumerable<NavigationMesh> query =
+                            from nav in orgnavmeshes
+                            where nav.FormKey.Equals(navmesh.Record.FormKey)
+                            select nav;
+                        var navtoremove = query.FirstOrDefault();
+                        if (navtoremove is null) continue;
 
-                        WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p , Parent = Skyrim.Worldspace.Tamriel };
-                        navcopy.Data.Parent = tamrielasaparent;
+
+                        if (navtoremove.Data is null || navtoremove.Data.Parent is null || original.Grid is null)
+                        {
+                            // Do nothing
+                        }
+                        else
+                        {
+                            // Create a Navmesh parent object
+                            // WARNING: the Y comes first, then X!
+                            P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
+
+                            WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p, Parent = Skyrim.Worldspace.Tamriel };
+                            navtoremove.Data.Parent = tamrielasaparent;
+                        }
+
+                        // Remove from the original, add to Tamriel
+                        original.NavigationMeshes.Remove(navtoremove);
+                        tamriel.NavigationMeshes.Add(navtoremove);
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("     Navmesh removed from parent, moved to Tamriel");
+
+                        var navcopy = navtoremove.Duplicate(state.PatchMod.GetNextFormKey());
+                    
+                        var nvmiCtx = state.LoadOrder.ListedOrder.NavigationMeshInfoMap().WinningContextOverrides().First();
+                        var nvmi = nvmiCtx.GetOrAddAsOverride(state.PatchMod);
+                    
+                        nvmi.MapInfos.Select(x =>
+                        {
+                            //if (!x.ParentWorldspace.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) return null;
+
+                        
+
+                            //if (x.ParentWorldspace.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey) || x.ParentCell.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey))
+                            //    System.Console.WriteLine("formkey... " + x.NavigationMesh.FormKey);
+
+                            if (x.NavigationMesh.FormKey.Equals(navmeshState.FormKey))
+                            {
+                                //System.Console.WriteLine("found nvmi");
+                                return x;
+                            }
+                            else
+                            {
+                                return null;
+                            }
+                        }).ForEach(x =>
+                        {
+                            if (x is null) return;
+
+                            P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
+
+                            NavigationMapInfoWorldParent tamrielasaparent = new() { ParentWorldspaceCoord = p, ParentWorldspace = Skyrim.Worldspace.Tamriel };
+                            x.Parent = tamrielasaparent;
+                            //System.Console.WriteLine("parent: " + x.Parent.Print());
+                            //x.Parent.Clear();
+                            //System.Console.WriteLine("swapped parent to: " + Skyrim.Worldspace.Tamriel.FormKey);
+                        });
+
+                        /*NavigationMapInfo nmi = new NavigationMapInfo();
+                        nmi.NavigationMesh.SetTo(navtoremove);
+                        nmi.ParentWorldspace.SetTo(parent.Record.FormKey);
+
+                        nvmi.MapInfos.Add(nmi);*/
                     }
 
+                    nbTotal++;
 
-                    System.Console.WriteLine("Navmesh parent: " + navcopy.Data?.Parent);
-
-                    //original.NavigationMeshes.Remove(navtoremove);
-                    //tamriel.NavigationMeshes.Add(navtoremove);
-                    tamriel.NavigationMeshes.Add(navcopy);
-
-
-                    /*NavigationMapInfo nmi = new NavigationMapInfo();
-                    nmi.NavigationMesh.SetTo(navtoremove);
-                    nmi.ParentWorldspace.SetTo(parent.Record.FormKey);
-
-                    nvmi.MapInfos.Add(nmi);*/
-
-                    System.Console.WriteLine("Navmesh ID added?" + navcopy.FormKey);
                 }
             }
+
+            if(Settings.copyNavmeshes)
+                System.Console.WriteLine("Copied " + nbTotal + " Navmeshes into the Tamriel worldspace");
+            else
+                System.Console.WriteLine("Moved " + nbTotal + " Navmeshes into the Tamriel worldspace");
 
             System.Console.WriteLine("All done patching!");
         }
