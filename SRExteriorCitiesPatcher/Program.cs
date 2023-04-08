@@ -10,14 +10,17 @@ using Mutagen.Bethesda.FormKeys.SkyrimSE;
 using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Plugins;
 using Noggog;
-
+using Mutagen.Bethesda.Plugins.Records;
+using Noggog.StructuredStrings;
 
 namespace ContainersRespawnPatcher
 {
     public class Program
     {
         // Dictionaries of containers
-        internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> originalCellGrid = new();
+        //internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> originalCellGrid = new();
+        internal static Dictionary<Tuple<P2Int,FormKey>, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> originalCellGrid = new();
+
         internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> tamrielCellGrids = new();
 
         internal static IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>? tamrielPersistentCellContext;
@@ -144,7 +147,7 @@ namespace ContainersRespawnPatcher
                 if (cell.Grid is null) continue;
 
                 // Filter out cells belonging to another worldspace than Tamriel
-                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.Tamriel.FormKey)) continue;
+                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
 
 
                 // Tamriel Persistent Cell
@@ -177,10 +180,23 @@ namespace ContainersRespawnPatcher
                 if (cell.Grid is null) continue;
 
                 // Ignore if the parent worldspace is null or not WhiterunWorld 
-                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.WhiterunWorld.FormKey)) continue;
+                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey)) continue;
+
 
                 // Add the cell context to the dictionary/map
-                originalCellGrid.TryAdd(cell.Grid.Point, cellContext);
+                /*if(cell.Grid.Point.IsZero)
+                {
+                    System.Console.WriteLine("Zero found " + cell.Grid.Point + " / " + cell.FormKey);
+                    System.Console.WriteLine("Zero cell is " + cell.Persistent.Count + " / " + cell.MajorFlags.HasFlag(Cell.MajorFlag.Persistent));
+
+
+                    if (originalCellGrid.TryGetValue(new Tuple<P2Int,FormKey>(cell.Grid.Point,cell.FormKey), out var test))
+                        System.Console.WriteLine("Zero added? " + test.Record.FormKey);
+
+                }*/
+
+                originalCellGrid.TryAdd(new Tuple<P2Int, FormKey>(cell.Grid.Point, cell.FormKey), cellContext);
+
             }
             System.Console.WriteLine("WhiterunWorld mapped!");
 
@@ -191,6 +207,7 @@ namespace ContainersRespawnPatcher
             int nbPersistTotal = 0;
 
             /// Check all placed objects 
+            System.Console.WriteLine("Moving placed objects...");
             foreach (var placed in state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(state.LinkCache))
             {
                 // Get parent cell 
@@ -213,14 +230,14 @@ namespace ContainersRespawnPatcher
                 if (parent is null || parent.Record is null) continue;
 
                 // WhiterunWorld
-                if (parent.Record.FormKey.Equals(Settings.WhiterunWorld.FormKey)) 
+                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey)) 
                 {
                     if(Settings.debug)
                         System.Console.WriteLine("Object found in worldspace!");
 
                     // Get the relevant cells
                     if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
-                    if (!originalCellGrid.TryGetValue(cell.Record.Grid.Point, out var originalCellContext)) continue;
+                    if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) continue;
 
                     // Get the original 
                     var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
@@ -248,7 +265,7 @@ namespace ContainersRespawnPatcher
                         nbTotal++;
 
                         if (Settings.debug)
-                            System.Console.WriteLine("Persistent object moved from " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
+                            System.Console.WriteLine("Persistent object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
                     }
 
                     // Move the temporary object to the Tamriel worldspace
@@ -260,19 +277,104 @@ namespace ContainersRespawnPatcher
                         // Remove from the original worldspace cell and move to the corresponding Tamriel cell
                         original.Temporary.Remove(placedState);
                         tamriel.Temporary.Add(placedState);
+                        tamriel.Location.SetTo(original.Location);
 
                         // Count
                         nbTempTotal++;
                         nbTotal++;
 
                         if (Settings.debug)
-                            System.Console.WriteLine("Temporary object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
+                            System.Console.WriteLine("Temporary object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
                     }
                 }
             }
             System.Console.WriteLine("Moved " + nbTotal + " objects (" + nbPersistTotal + " peristent + " + nbTempTotal + " temporary objects)");
 
-            System.Console.WriteLine("All done patching!");
+            // Reset counters
+            nbTotal = 0;
+            nbTempTotal = 0;
+            nbPersistTotal = 0;
+
+            /// Check all placed NPCs 
+            System.Console.WriteLine("Moving placed NPCs...");
+            foreach (var placed in state.LoadOrder.PriorityOrder.PlacedNpc().WinningContextOverrides(state.LinkCache))
+            {
+                // Get parent cell 
+                placed.TryGetParentSimpleContext<ICellGetter>(out var cell);
+
+                // Ignore null 
+                if (cell is null || cell.Record is null || cell.Record.Grid is null) continue;
+                if (placed is null) continue;
+
+                // Get the parent worldspace
+                placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
+                if (parent is null || parent.Record is null) continue;
+
+                // WhiterunWorld
+                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.WhiterunWorld.FormKey))
+                {
+                    if (Settings.debug)
+                        System.Console.WriteLine("NPC found in worldspace!");
+
+                    // Get the relevant cells
+                    if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
+                    if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) continue;
+
+                    // Get the original 
+                    var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
+                    if (original is null) continue;
+
+
+                    // Open/copy the PlacedObject in the patch mod
+                    var placedState = placed.GetOrAddAsOverride(state.PatchMod);
+
+                    // Move persistent objects to the Tamriel Persistent cell
+                    if (original.Persistent.Contains(placedState))
+                    {
+                        if (tamrielPersistentCellContext is null) continue;
+
+                        // Get the Tamriel Persistent cell
+                        var tamPersistCell = tamrielPersistentCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamPersistCell is null) continue;
+
+                        // Remove from the original worldspace cell and move to the Tamriel Persistent cell
+                        original.Persistent.Remove(placedState);
+                        tamPersistCell.Persistent.Add(placedState);
+
+                        // Count
+                        nbPersistTotal++;
+                        nbTotal++;
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("Persistent NPC moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
+                    }
+
+                    // Move the temporary object to the Tamriel worldspace
+                    if (original.Temporary.Contains(placedState))
+                    {
+                        var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamriel is null) continue;
+
+                        // Remove from the original worldspace cell and move to the corresponding Tamriel cell
+                        original.Temporary.Remove(placedState);
+                        tamriel.Temporary.Add(placedState);
+                        tamriel.Location.SetTo(original.Location);
+
+                        // Count
+                        nbTempTotal++;
+                        nbTotal++;
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("NPC moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to Tamriel " + tamriel.Grid?.Point.ToString());
+                    }
+                }
+            }
+            System.Console.WriteLine("Moved " + nbTotal + " NPCs (" + nbPersistTotal + " peristent + " + nbTempTotal + " temporary NPCs)");
+
+
+            /// Navmeshes
+
+                System.Console.WriteLine("All done patching!");
         }
     }
 }
