@@ -20,6 +20,9 @@ namespace ContainersRespawnPatcher
         internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> originalCellGrid = new();
         internal static Dictionary<P2Int, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> tamrielCellGrids = new();
 
+        internal static IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>? tamrielPersistentCellContext;
+        internal static IFormLinkGetter<ICellGetter> tamrielPersistentCell = new FormLink<ICellGetter>(FormKey.Factory("000D74:Skyrim.esm"));
+
         public static Lazy<Settings> _settings = null!;
         public static Settings Settings => _settings.Value;
 
@@ -124,197 +127,38 @@ namespace ContainersRespawnPatcher
             // Create a link cache
             ILinkCache cache = state.LinkCache;
 
-            // Counter
-            int nbContTotal = 0;
-
-            /*
-             * Swap the placed container in that cell with a No Respawn version
-             * 
-             */
-            /*void DoContainerSwap(IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter> placed, IModContext<ICellGetter> cell)
-            {
-                // Find the base record
-                placed.Record.Base.TryResolve(cache, out var baseObject);
-                if (baseObject is null || baseObject.EditorID is null) return;
-
-                // If the containers have this editor ID, it is a container
-                if (containersRespawn.ContainsKey(baseObject.FormKey))
-                {
-                    if (Settings.debug)
-                        System.Console.WriteLine("Swapping object:" + baseObject.EditorID + " in cell: " + cell.Record.EditorID);
-
-                    // Swap the container base
-                    var placedCopy = placed.GetOrAddAsOverride(state.PatchMod);
-                    string edidnorespawn = baseObject.EditorID + "_NoRespawn";
-
-                    Container c = containersNoRespawn.Values.Where(x => x?.EditorID == edidnorespawn).First();
-                    if (c is null) return;
-                    placedCopy.Base.SetTo(c);
-
-                    nbContTotal++;
-
-                    // Set the parent object
-                    var parent = (ICellGetter?)placed.Parent?.Record;
-
-                    // Handle ownership properly
-                    if (placed?.Record.Ownership is null) return;
-                    if (placedCopy.Ownership is null) return;
-
-                    // Just in case the copy has ownership issues
-                    if (placedCopy.Ownership.Owner != placed.Record.Ownership.Owner)
-                        placedCopy.Ownership.Owner = placed.Record.Ownership.Owner.AsNullable();
-                }
-                // Container already flagged as "No Respawn"
-                else if (containersNoRespawn.ContainsKey(baseObject.FormKey))
-                {
-                    // Nothing to do!
-                }
-                // Not a container
-                else
-                {
-                    return;
-                }
-            }*/
-            /*
-            /// Check settings
-            System.Console.WriteLine("Doing settings checks...");
-
-            if (Settings.CellsNotRespawningSettings.CellNoRespawnEditorIDs.Count == 0)
-            {
-                System.Console.WriteLine("WARNING: NO SAFE PLAYER HOME SET, ALL CONTAINERS WILL RESPAWN IN ALL CELLS");
-            }
-            if (Settings.SafeContainersSettings.ContainerEditorIDs.Count == 0)
-            {
-                System.Console.WriteLine("ERROR: NO CONTAINERS SET, ABORTING! THIS WILL CAUSE MAJOR ISSUES IN YOUR GAME!");
-                throw new Exception("Invalid settings!");
-            }
-
-            System.Console.WriteLine("Settings seem valid, starting!");
-
-
-            /// Create a dictionary of placed containers
-            System.Console.WriteLine("Starting building containers contexts!");
-
-            // Create the dictionary
-            var containerContext = new Lazy<Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter>>>();
-
-            // Fill the dictionary from the link cache
-            state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache)
-                .Where(ctx => {
-                    return containersRespawn.ContainsKey(ctx.Record.Base.FormKey) || containersNoRespawn.ContainsKey(ctx.Record.Base.FormKey);
-                })
-                .ForEach(ctx => containerContext.Value.Add(ctx.Record.FormKey, ctx));
-
-            System.Console.WriteLine("Containers contexts done!");
-
-            */
-
-
-
-
-            /*System.Console.WriteLine("Starting building object contexts!");
-
-            // Create the dictionary
-            var objectContexts = new Lazy<Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter>>>();
-
-            // Fill the dictionary from the link cache
-            state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache)
-                .Where(ctx => {
-                    ctx.TryGetParentSimpleContext<ICellGetter>(out var cell);
-                    if (cell is null) return false;
-                    cell.TryGetParentSimpleContext<IWorldspaceGetter>(out var worldspace);
-                    if (worldspace is null|| worldspace.Record is null || worldspace.Record.EditorID is null) return false;
-
-                    return worldspace.Record.EditorID.Contains("WhiterunWorld", StringComparison.OrdinalIgnoreCase) ;
-                })
-                .ForEach(ctx => objectContexts.Value.Add(ctx.Record.FormKey, ctx));
-
-            System.Console.WriteLine("Object contexts done!");*/
-
-
-            /*System.Console.WriteLine("Mapping Tamriel");
-            foreach (var worldspaceContext in state.LoadOrder.ListedOrder.Worldspace().WinningContextOverrides())
-            {
-                if (worldspaceContext.Record.EditorID == "Tamriel")
-                {
-                    foreach (var block in worldspaceContext.Record.SubCells)
-                    {
-                        foreach (var subBlock in block.Items)
-                        {
-                            foreach (var cell in subBlock.Items)
-                            {
-                                if (cell is null || cell.Grid is null || cell.Grid.Point.IsZero) continue;
-
-                                //System.Console.WriteLine("in cell: " + cell.FormKey + " : " + cell.Name + " / Grid: " + cell.Grid?.Point);
-                                
-
-                                tamrielCellGrids.Add(cell.Grid.Point, cell);
-                            }
-                        }
-                    }
-                }
-            }
-            System.Console.WriteLine("Tamriel mapped");*/
-
-
-
-
-            /*foreach (var worldspaceContext in state.LoadOrder.ListedOrder.Worldspace().WinningContextOverrides())
-            {
-                if(worldspaceContext.Record.EditorID == "WhiterunWorld")
-                {
-                    foreach (var block in worldspaceContext.Record.SubCells)
-                    {
-                        foreach (var subBlock in block.Items)
-                        {
-                            foreach (var cell in subBlock.Items)
-                            {
-                                if (cell is null || cell.Grid is null) continue;
-
-                                System.Console.WriteLine("in cell: " + cell.FormKey + " : " + cell.Name + " / Grid: " + cell.Grid?.Point);
-
-                                int nb = 0;
-                                // On all placed Temporary items
-                                foreach (var obj in cell.Temporary)
-                                {
-                                    if (obj is null || obj is null) continue;
-
-                                    nb++;
-
-                                    objectContexts.Value.TryGetValue(obj.FormKey, out var placedContext);
-                                    if (placedContext is null) continue;
-                                    var cellState = cell.GetOrAddAsOverride(state.PatchMod);
-
-                                    placedContext.Parent.
-                                    //placedContext.Record.
-                                }
-
-
-                                System.Console.WriteLine(" would require moving " + nb + " temp records");
-                            }
-                        }
-                    }
-                }
-            }*/
 
             /// Map Tamriel cells 
             System.Console.WriteLine("Mapping Tamriel");
             foreach (var cellContext in state.LoadOrder.ListedOrder.Cell().WinningContextOverrides(cache))
             {
                 // Ignore null
-                if (cellContext is null || cellContext.Record is null || cellContext.Record.EditorID is null) continue;
+                if (cellContext is null || cellContext.Record is null) continue;
 
                 var cell = cellContext.Record;
 
-                // filter out unwanted cells
+                // Filter out interior cells
                 if (cell.Flags.HasFlag(Cell.Flag.IsInteriorCell)) continue;
+
+                // Filter out cells with no Grid
                 if (cell.Grid is null) continue;
-                else if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.Tamriel.FormKey)) continue;
+
+                // Filter out cells belonging to another worldspace than Tamriel
+                if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.Tamriel.FormKey)) continue;
 
 
-                //var cellState = cellContext.GetOrAddAsOverride(state.PatchMod);
-                tamrielCellGrids.Add(cell.Grid.Point, cellContext);
-            
+                // Tamriel Persistent Cell
+                if (tamrielPersistentCellContext is null 
+                    && cellContext.Record.FormKey.Equals(tamrielPersistentCell.FormKey))
+                {
+                    tamrielPersistentCellContext = cellContext;
+
+                    System.Console.WriteLine("Found Tamriel persistent cell! "+ tamrielPersistentCellContext.Record.FormKey);
+                }
+                else
+                {
+                    tamrielCellGrids.Add(cell.Grid.Point, cellContext);
+                }
             }
             System.Console.WriteLine("Tamriel mapped");
 
@@ -328,20 +172,25 @@ namespace ContainersRespawnPatcher
 
                 var cell = cellContext.Record;
 
-
-                // filter out unwanted cells
+                // Filter out unwanted cells
                 //if (cell.Flags.HasFlag(Cell.Flag.IsInteriorCell)) continue;
                 if (cell.Grid is null) continue;
 
+                // Ignore if the parent worldspace is null or not WhiterunWorld 
                 if (!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.WhiterunWorld.FormKey)) continue;
 
-                //var cellState = cellContext.GetOrAddAsOverride(state.PatchMod);
+                // Add the cell context to the dictionary/map
                 originalCellGrid.TryAdd(cell.Grid.Point, cellContext);
             }
             System.Console.WriteLine("WhiterunWorld mapped!");
 
 
-            // Check all placed objects 
+            // Counter
+            int nbTotal = 0;
+            int nbTempTotal = 0;
+            int nbPersistTotal = 0;
+
+            /// Check all placed objects 
             foreach (var placed in state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(state.LinkCache))
             {
                 // Get parent cell 
@@ -351,164 +200,79 @@ namespace ContainersRespawnPatcher
                 if (cell is null || cell.Record is null || cell.Record.Grid is null) continue;
                 if (placed is null) continue;
 
+                // Ignore occlusion planes
+                if (Settings.ignoreOcclusion && placed.Record.Base.FormKey.Equals(Skyrim.Static.PlaneMarker))
+                {
+                    if (Settings.debug)
+                        System.Console.WriteLine("Occlusion plane ignored in worldspace!");
+                    continue;
+                }
 
                 // Get the parent worldspace
                 placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
-                if (parent is null || parent.Record is null || parent.Record.EditorID is null) continue;
+                if (parent is null || parent.Record is null) continue;
 
+                // WhiterunWorld
                 if (parent.Record.FormKey.Equals(Settings.WhiterunWorld.FormKey)) 
                 {
-                    //var cells = state.LoadOrder.PriorityOrder.Cell().WinningOverrides();
+                    if(Settings.debug)
+                        System.Console.WriteLine("Object found in worldspace!");
 
-
-                    System.Console.WriteLine("object in worldspace");
+                    // Get the relevant cells
                     if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
                     if (!originalCellGrid.TryGetValue(cell.Record.Grid.Point, out var originalCellContext)) continue;
 
-                    var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                    // Get the original 
                     var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
+                    if (original is null) continue;
 
-                    if (tamriel is null || original is null) continue;
 
-
-                    // Ignore occlusion planes
-                    if (placed.Record.Base.FormKey.Equals(Skyrim.Static.PlaneMarker))
-                    {
-                        continue;
-                    }
-
+                    // Open/copy the PlacedObject in the patch mod
                     var placedState = placed.GetOrAddAsOverride(state.PatchMod);
 
-                    if(original.Persistent.Contains(placedState))
+                    // Move persistent objects to the Tamriel Persistent cell
+                    if (original.Persistent.Contains(placedState))
                     {
+                        if (tamrielPersistentCellContext is null) continue;
+
+                        // Get the Tamriel Persistent cell
+                        var tamPersistCell = tamrielPersistentCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamPersistCell is null) continue;
+
+                        // Remove from the original worldspace cell and move to the Tamriel Persistent cell
                         original.Persistent.Remove(placedState);
-                        tamriel.Persistent.Add(placedState);
-                        System.Console.WriteLine("persistent object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
+                        tamPersistCell.Persistent.Add(placedState);
+
+                        // Count
+                        nbPersistTotal++;
+                        nbTotal++;
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("Persistent object moved from " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
                     }
 
                     // Move the temporary object to the Tamriel worldspace
                     if (original.Temporary.Contains(placedState))
                     {
+                        var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamriel is null ) continue;
+
+                        // Remove from the original worldspace cell and move to the corresponding Tamriel cell
                         original.Temporary.Remove(placedState);
                         tamriel.Temporary.Add(placedState);
-                        System.Console.WriteLine("temporary object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
-                    }
 
+                        // Count
+                        nbTempTotal++;
+                        nbTotal++;
 
-
-                    // Swap 
-                    //var placedCopy = placed.GetOrAddAsOverride(state.PatchMod);
-                    //placedCopy.AttachRef
-
-                    //var t = state.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(cache).First();
-                    //t.Record.Persistent
-                }
-
-                    
-                //placed.Parent = 
-            }
-
-
-            /// Iterate on cells and 
-            /*foreach (var cellContext in state.LoadOrder.ListedOrder.Cell().WinningContextOverrides(cache))
-            {
-                // Ignore null
-                if (cellContext is null || cellContext.Record is null || cellContext.Parent is null) continue;
-
-                var cell = cellContext.Record;
-
-
-                // filter out unwanted cells
-                //if (cell.Flags.HasFlag(Cell.Flag.IsInteriorCell)) continue;
-                if (cell.Grid is null) continue;
-
-                if(!cellContext.TryGetParent<IWorldspaceGetter>(out var worldspace) || !worldspace.FormKey.Equals(Settings.WhiterunWorld.FormKey)) continue;
-
-
-                var cellState = cellContext.GetOrAddAsOverride(state.PatchMod);
-
-                originalCellGrid.TryAdd(cell.Grid.Point,cellState);
-
-                tamrielCellGrids.TryGetValue(cell.Grid.Point, out var tamrielCell);
-                if (tamrielCell is null) continue; //error?
-
-                System.Console.WriteLine("cell persistent: " + cell.Persistent.Count + " / temporary: " + cell.Temporary.Count);
-                System.Console.WriteLine("cellstate persistent: " + cellState.Persistent.Count + " / temporary: " + cellState.Temporary.Count);
-
-                if (cell.Persistent is not null)
-                {
-                    List<IPlaced> newPer = tamrielCell.Persistent;
-                    newPer.AddRange(cellState.Persistent);
-                    //foreach (var placed in cellState.Persistent)
-                    //{
-                    //   tamrielCell.Persistent (placed)
-                    //}
-
-                    //tamrielCell.Persistent.AddRange(cellState.Persistent);
-                    //tamrielCell.Temporary.AddRange(cellState.Temporary);
-
-                    tamrielCell.Persistent.SetTo(newPer);
-                }
-
-                if (cell.Temporary is not null)
-                {
-                    
-                    List<IPlaced> newTemp = tamrielCell.Temporary;
-                    newTemp.AddRange(cellState.Temporary);
-
-                    tamrielCell.Persistent.SetTo(newTemp);
-                }
-
-
-            }*/
-
-                /*foreach (var cellContext in state.LoadOrder.ListedOrder.Cell().WinningContextOverrides(cache))
-                {
-                    // Ignore null
-                    if (cellContext is null || cellContext.Record is null || cellContext.Record.EditorID is null) continue;
-
-                    // If the cell is listed in the "No respawn" locations
-                    if (Settings.CellsNotRespawningSettings.CellNoRespawnEditorIDs.Contains(cellContext.Record.EditorID))
-                    {
                         if (Settings.debug)
-                            System.Console.WriteLine("Editing cell: " + cellContext.Record.EditorID);
-
-                        // On all placed Temporary items
-                        foreach (var obj in cellContext.Record.Temporary)
-                        {
-                            if (obj is null || obj is null) continue;
-
-
-                            //FOR SR EXTERIOR obj.DeepCopy().RemapLinks
-
-
-                            containerContext.Value.TryGetValue(obj.FormKey, out var placedContext);
-                            if (placedContext is null) continue;
-
-                            DoContainerSwap(placedContext, cellContext);
-                        }
-
-                        // On all placed Persistent items
-                        foreach (var obj in cellContext.Record.Persistent)
-                        {
-                            if (obj is null || obj is null) continue;
-
-
-                            //FOR SR EXTERIOR obj.DeepCopy().RemapLinks
-
-
-                            containerContext.Value.TryGetValue(obj.FormKey, out var placedContext);
-                            if (placedContext is null) continue;
-
-                            DoContainerSwap(placedContext, cellContext);
-                        }
+                            System.Console.WriteLine("Temporary object moved from " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
                     }
-
                 }
-
-                System.Console.WriteLine("Swapped " + nbContTotal + " containers for a safe No Respawn one!");
-
-                System.Console.WriteLine("All done!");*/
             }
+            System.Console.WriteLine("Moved " + nbTotal + " objects (" + nbPersistTotal + " peristent + " + nbTempTotal + " temporary objects)");
+
+            System.Console.WriteLine("All done patching!");
+        }
     }
 }

@@ -44,6 +44,10 @@ namespace ContainersRespawnPatcher
 
         public Cells CellsNotRespawningSettings { get; set; } = new();
 
+        [SettingName("Ignore Occlusion")]
+        [Tooltip("Set to true to ignore all occlusion planes")]
+        public bool ignoreOcclusion = true;
+
         [SettingName("Debug")]
         [Tooltip("Activate all the debug messages")]
         public bool debug = false;
