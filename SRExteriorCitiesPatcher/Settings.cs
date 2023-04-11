@@ -13,12 +13,12 @@ namespace ContainersRespawnPatcher
 
     public class Settings
     {
-        /*public IFormLinkGetter<IWorldspaceGetter> WhiterunWorld = new FormLink<IWorldspaceGetter>(FormKey.Factory("01A26F:Skyrim.esm"));
-        public IFormLinkGetter<IWorldspaceGetter> Tamriel = new FormLink<IWorldspaceGetter>(FormKey.Factory("00003c:Skyrim.esm"));*/
+        [SettingName("Enable navmesh modification (Patch makers only))")]
+        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
+        public bool enableNavmeshEdit = false;
 
-
-        [SettingName("Copy navmeshes (experimental)")]
-        [Tooltip("Set to true to make copies rather than move navmeshes")]
+        [SettingName("Copy navmeshes (unticked is very experimental)")]
+        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
         public bool copyNavmeshes = true;
 
         [SettingName("Ignore Occlusion")]

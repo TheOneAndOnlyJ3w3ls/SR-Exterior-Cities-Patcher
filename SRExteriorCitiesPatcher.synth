@@ -14,7 +14,7 @@
 
 {
   "AddGitPatcher": {
-    "Url": "https://github.com/TheOneAndOnlyJ3w3ls/Containers-Respawn-Patcher",
-    "SelectedProject": "ContainersRespawnPatcher\\ContainersRespawnPatcher.csproj"
+    "Url": "https://github.com/TheOneAndOnlyJ3w3ls/SR-Exterior-Cities-Patcher",
+    "SelectedProject": "SRExteriorCitiesPatcher\\SRExteriorCitiesPatcher.csproj"
   }
 }
