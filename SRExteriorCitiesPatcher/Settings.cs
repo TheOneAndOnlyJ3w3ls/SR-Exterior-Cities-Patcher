@@ -14,7 +14,7 @@ namespace ContainersRespawnPatcher
     public class Settings
     {
         [SettingName("Enable navmesh modification (Patch makers only))")]
-        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
+        [Tooltip("Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the CK")]
         public bool enableNavmeshEdit = false;
 
         [SettingName("Copy navmeshes (unticked is very experimental)")]
