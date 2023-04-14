@@ -57,7 +57,7 @@ namespace ContainersRespawnPatcher
             ModKey.FromNameAndExtension("Skyrim.esm"),
             ModKey.FromNameAndExtension("Update.esm"),
             ModKey.FromNameAndExtension("Dawnguard.esm"),
-            ModKey.FromNameAndExtension("Hearthfire.esm"),
+            ModKey.FromNameAndExtension("HearthFires.esm"),
             ModKey.FromNameAndExtension("Dragonborn.esm")
         };
 
