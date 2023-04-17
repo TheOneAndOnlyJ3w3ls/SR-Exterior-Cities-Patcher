@@ -17,7 +17,7 @@ using System.Collections.Immutable;
 using CommandLine;
 using Mutagen.Bethesda.Plugins.Order;
 
-namespace ContainersRespawnPatcher
+namespace SRExteriorCitiesPatcher
 {
     public class Program
     {
@@ -190,14 +190,19 @@ namespace ContainersRespawnPatcher
                     }
                     else
                     {
-                        tamrielCellGrids.Add(cell.Grid.Point, cellContext);
+                        bool test = tamrielCellGrids.TryAdd(cell.Grid.Point, cellContext);
+
+                        if (Settings.debug && !test)
+                            System.Console.WriteLine("Duplicate cell found at " + cell.Grid.Point.X + "," + cell.Grid.Point.Y);
                     }
                 }
                 // Another of the accepted worldspaces
                 else if (worldspacesToMove.Contains(worldspace.FormKey))
                 {
                     originalCellGrid.TryAdd(new Tuple<P2Int, FormKey>(cell.Grid.Point, cell.FormKey), cellContext);
-                    originalCells.Add(cell.Grid.Point);
+                    
+                    if(!originalCells.Contains(cell.Grid.Point))
+                        originalCells.Add(cell.Grid.Point);
                 }
             }
         }
@@ -473,7 +478,7 @@ namespace ContainersRespawnPatcher
                         if (navmeshState is null) continue;
 
 
-                        // Make a copy of the navmesh and place it in the right worldspace
+                        // Make a copy of the navmeshContext and place it in the right worldspace
                         if (Settings.copyNavmeshes)
                         {
                             var navcopy = navmeshState.Duplicate(state.PatchMod.GetNextFormKey());
