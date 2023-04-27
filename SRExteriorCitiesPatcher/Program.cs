@@ -333,6 +333,7 @@ namespace SRExteriorCitiesPatcher
             nbTempTotal = 0;
             nbPersistTotal = 0;
 
+            // NPCs
             foreach (var placed in loadOrderToConsiderForNPCs)
             {
                 DoSimpleMove(state, placed);
@@ -345,6 +346,7 @@ namespace SRExteriorCitiesPatcher
             nbTempTotal = 0;
             nbPersistTotal = 0;
 
+            // Hazards
             foreach (var placed in loadOrderToConsiderForHazards)
             {
                 DoSimpleMove(state, placed);
@@ -353,13 +355,14 @@ namespace SRExteriorCitiesPatcher
             System.Console.WriteLine("Done retrieving placed objects from main plugin!");
 
 
+            System.Console.WriteLine("Door before SREX: " + doors.Count);
             /* --------------------------------------------------- \
             |                     HANDLE DOORS                     |
             \ --------------------------------------------------- */
             // Only if SR Exterior Cities main plugin is active
             if (srexModExists)
             {
-                System.Console.WriteLine("Retrieving doors from main plugin...");
+                System.Console.WriteLine("Sorting out doors from main plugin...");
 
                 // Get only SREX main mod or patches
                 var modSREXMain = state.LoadOrder.PriorityOrder.Where(x => x.ModKey.Equals(srexMain) || x.ModKey.FileName.String.Contains("SREX_", StringComparison.Ordinal));
@@ -413,9 +416,12 @@ namespace SRExteriorCitiesPatcher
 
                     // Move the door --- DON'T!
                     //DoSimpleMove(state, obj);
-                
+
+                    // Remove the door from the queue, it has been handled by the main plugin or patch
+                    doors = new Queue<FormKey>(doors.Where(x => x != obj.Record.FormKey));
+
                     //Only alter the placement, flags, Enable Parent and Location
-                    if(otherPlacedContext.Placement is not null)
+                    if (otherPlacedContext.Placement is not null)
                         placedState.Placement = placement;
 
                     if(otherPlacedContext.EnableParent is not null)
@@ -429,9 +435,35 @@ namespace SRExteriorCitiesPatcher
                         placedState.LocationReference = location.AsNullable();
 
                 }
-                System.Console.WriteLine("Done handling Doors");
+
             }
 
+
+            // Handle doors that are not modified last by SREX or its patches
+            System.Console.WriteLine("Moving doors...");
+            foreach (var obj in state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache))
+            {
+                // Ignore Null
+                if (obj is null) continue;
+
+                // Get the parent worldspace
+                obj.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
+                if (parent is null || parent.Record is null) continue;
+
+                // Ignore if the door is not in the right worldspaces
+                if (!worldspacesToMove.Contains(parent.Record.FormKey) /*&& !parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)*/) continue;
+
+                // Ignore if it is not one of the doors
+                if (!doors.Contains(obj.Record.FormKey)) continue;
+
+                // Move the door
+                DoSimpleMove(state, obj);
+
+                if(Settings.debug)
+                    System.Console.WriteLine("Found Door to move: " + obj.Record.FormKey);
+            }
+
+            System.Console.WriteLine("Done handling Doors!");
 
             /* =================================================== \\
             || --------------------------------------------------- ||
