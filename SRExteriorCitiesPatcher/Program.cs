@@ -375,6 +375,7 @@ namespace SRExteriorCitiesPatcher
                     if (parent is null || parent.Record is null) continue;
 
                     // Ignore if the door is not in the right worldspaces
+                    // --------------- SHOULD THIS NOT BE: IF NOT IN TAMRIEL, MOVE BACK IN TAMRIEL?
                     if (!worldspacesToMove.Contains(parent.Record.FormKey) && !parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
 
                     // Ignore if it is not one of the doors
@@ -419,8 +420,9 @@ namespace SRExteriorCitiesPatcher
 
                     // Remove the door from the queue, it has been handled by the main plugin or patch
                     doors = new Queue<FormKey>(doors.Where(x => x != obj.Record.FormKey));
+                    doorContexts = new Queue<IPlacedObjectGetter>(doorContexts.Where(x => x.FormKey != otherPlacedContext.FormKey));
 
-                    //Only alter the placement, flags, Enable Parent and Location
+                    // Only alter the placement, flags, Enable Parent and Location
                     if (otherPlacedContext.Placement is not null)
                         placedState.Placement = placement;
 
@@ -451,7 +453,11 @@ namespace SRExteriorCitiesPatcher
                 if (parent is null || parent.Record is null) continue;
 
                 // Ignore if the door is not in the right worldspaces
-                if (!worldspacesToMove.Contains(parent.Record.FormKey) /*&& !parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)*/) continue;
+                if (!worldspacesToMove.Contains(parent.Record.FormKey)) continue;
+                
+                // Ignore if the door is already in Tamriel
+                // Note: this should never happen, but it stands to reason that this door should not be touched!
+                if (parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
 
                 // Ignore if it is not one of the doors
                 if (!doors.Contains(obj.Record.FormKey)) continue;
