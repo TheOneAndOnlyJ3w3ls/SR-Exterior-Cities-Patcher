@@ -1,8 +1,9 @@
 # SR Exterior Cities Patcher
 Allows you to make a patch to make your entire modlist compatible with SR Exterior Cities by 1990SRider.
 
-Also find it on Nexus:
+Please go download & endorse on nexus if you found the patcher useful! It'd help some :)
 https://www.nexusmods.com/skyrimspecialedition/mods/89066
+
 
 Any mod without navmesh can be patched without any additional step. Just run the patcher with the default settings.
 IF a mod makes Navmesh edits to the interior city worldspace, it needs a patch made in the Creation Kit. Either use one that is already made, or make one following the instructions below.
