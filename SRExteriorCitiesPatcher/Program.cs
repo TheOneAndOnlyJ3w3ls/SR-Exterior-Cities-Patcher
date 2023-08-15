@@ -286,13 +286,10 @@ namespace SRExteriorCitiesPatcher
 
 
             // Try to get the main mod
-            ModKey.TryFromFileName("SR Exterior Cities.esp", out var srexMainTmp);
-            srexMain = srexMainTmp;
-
-            if (state.LoadOrder.ListedOrder.ModExists(srexMain))
+            if (state.LoadOrder.TryGetValue("SR Exterior Cities.esp", out var srexMainTmp))
             {
-                //if(Settings.debug)
-                    System.Console.WriteLine("Main SE Exterior plugin detected!");
+                srexMain = srexMainTmp.ModKey;
+                System.Console.WriteLine("Main SE Exterior plugin detected!");
 
                 srexModExists = true;
 
@@ -300,7 +297,7 @@ namespace SRExteriorCitiesPatcher
                 MasterReference m = new() { Master = srexMain, FileSize = 0 };
                 state.PatchMod.ModHeader.MasterReferences.Add(m);
             }
-            else //if (Settings.debug)
+            else
                 System.Console.WriteLine("WARNING: Main SE Exterior plugin not detected!");
             
 
