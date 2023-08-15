@@ -11,11 +11,7 @@ using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Plugins;
 using Noggog;
 using Mutagen.Bethesda.Plugins.Records;
-using Noggog.StructuredStrings;
 using DynamicData;
-using System.Collections.Immutable;
-using CommandLine;
-using Mutagen.Bethesda.Plugins.Order;
 
 namespace SRExteriorCitiesPatcher
 {
@@ -35,7 +31,7 @@ namespace SRExteriorCitiesPatcher
         internal static HashSet<FormKey> SREXMainFormIDs = new();
 
         // Doors
-        internal static HashSet<FormKey> allDoors = new();
+        internal static Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter>> srexDoors = new();
 
         // Counters
         internal static int nbTotal = 0;
@@ -94,7 +90,7 @@ namespace SRExteriorCitiesPatcher
                 if (Settings.debug)
                     System.Console.WriteLine("Object found in worldspace!");
 
-                
+
                 // Get the relevant cells
                 if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) return;
                 if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) return;
@@ -152,7 +148,62 @@ namespace SRExteriorCitiesPatcher
             if (nbTotal % 1000 == 0 && nbTotal > 0)
                 System.Console.WriteLine("Moved " + nbTotal + " objects...");
         }
-    
+
+
+        /**
+         * Alters the door placement, flags and enableparent accordingly
+         */
+        internal static void DoDoorDisplacement(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter> door)
+        {
+            // Only update the placement
+            srexDoors.TryGetValue(door.Record.FormKey, out var value);
+            if (value is null) return;
+
+            Placement placement = new();
+            if (door.Record.Placement is not null)
+                placement = new()
+                {
+                    Position = door.Record.Placement.Position,
+                    Rotation = door.Record.Placement.Rotation
+                };
+
+
+            EnableParent enableParent = new();
+            if (door.Record.EnableParent is not null)
+                enableParent = new()
+                {
+                    Flags = door.Record.EnableParent.Flags,
+                    Reference = door.Record.EnableParent.Reference.AsSetter(),
+                    Versioning = door.Record.EnableParent.Versioning
+                };
+
+            int majorFlags = door.Record.MajorRecordFlagsRaw;
+            SkyrimMajorRecord.SkyrimMajorRecordFlag flags = door.Record.SkyrimMajorRecordFlags;
+            IFormLink<ILocationRecordGetter> location = door.Record.LocationReference.AsSetter();
+
+
+            var placedState = value.GetOrAddAsOverride(state.PatchMod);
+            if (placedState is null) return;
+
+            // Only alter the placement, flags, Enable Parent, Flags and Location
+            if (door.Record.Placement is not null)
+                placedState.Placement = placement;
+
+            if (door.Record.EnableParent is not null)
+                placedState.EnableParent = enableParent;
+
+            placedState.MajorRecordFlagsRaw = majorFlags;
+
+            placedState.SkyrimMajorRecordFlags = flags;
+
+            if (!location.IsNull)
+                placedState.LocationReference = location.AsNullable();
+
+            if (Settings.debug)
+            {
+                System.Console.WriteLine("Door found, already modified by SREX");
+            }
+        }
 
         /**
          * Fill in dictionaries of the valid cells, both in the city Worldspaces and the corresponding Tamriel cells
@@ -258,6 +309,34 @@ namespace SRExteriorCitiesPatcher
             DoWorldspaceMapping(state);
             System.Console.WriteLine("All worldspaces mapped!");
 
+            /* --------------------------------------------------- \
+            |                     HANDLE DOORS                     |
+            \ --------------------------------------------------- */
+
+            // Counter
+            int nbDoors = 0;
+
+            // Only if SR Exterior Cities main plugin is active
+            if (srexModExists)
+            {
+                // Get only SREX modified doors
+                var modsSREXorPatches = state.LoadOrder.PriorityOrder.Where(x => x.ModKey.Equals(srexMain)
+                                                                                 || x.ModKey.FileName.String.Contains("SREX_", StringComparison.Ordinal));
+
+                System.Console.WriteLine("Mapping out SR Exterior Cities (and patches) modified doors...");
+                foreach (var obj in modsSREXorPatches.PlacedObject().WinningContextOverrides(cache))
+                {
+                    // Ignore Null
+                    if (obj is null) continue;
+
+                    // Ignore if not a door
+                    obj.Record.Base.TryResolve<IDoorGetter>(state.LinkCache, out var door);
+                    if (door is null) continue;
+
+                    srexDoors.TryAdd(obj.Record.FormKey, obj);
+                }
+                System.Console.WriteLine("Doors modified SREX or its patches): " + srexDoors.Count);
+            }
 
             /* --------------------------------------------------- \
             |             FORM LOADORDER TO CONSIDER               |
@@ -268,7 +347,9 @@ namespace SRExteriorCitiesPatcher
             IEnumerable<IModContext<ISkyrimMod, ISkyrimModGetter, IAPlacedTrap, IAPlacedTrapGetter>> loadOrderToConsiderForHazards;
             if (srexModExists)
             {
-                var modsWithoutSREXMain = state.LoadOrder.PriorityOrder.Where(x => !x.ModKey.Equals(srexMain) && !vanillaModKeys.Contains(x.ModKey));
+                var modsWithoutSREXMain = state.LoadOrder.PriorityOrder.Where(x => !vanillaModKeys.Contains(x.ModKey) 
+                                                                                    && !x.ModKey.Equals(srexMain) /*&& !x.ModKey.FileName.String.Contains("SREX_", StringComparison.Ordinal)*/);
+
 
                 loadOrderToConsiderForObjects = modsWithoutSREXMain.PlacedObject().WinningContextOverrides(state.LinkCache);
                 loadOrderToConsiderForNPCs = modsWithoutSREXMain.PlacedNpc().WinningContextOverrides(state.LinkCache);
@@ -299,11 +380,44 @@ namespace SRExteriorCitiesPatcher
 
                 // When the main mod exists, the doors need specific handling
                 placed.Record.Base.TryResolve<IDoorGetter>(state.LinkCache, out var door);
-                if (door is not null) continue;
+                if (door is not null)
+                {
+                    // Ignore if it is a blacklisted door (city gates)
+                    if (doorsToExclude.Contains(placed.Record.FormKey)) continue;
+
+                    // Get the parent worldspace
+                    placed.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
+                    if (parent is null || parent.Record is null) continue;
+
+
+                    // If the door was edited by SREX too
+                    if (srexDoors.ContainsKey(placed.Record.FormKey))
+                    {
+                        // Ignore if door is not in worldspaces
+                        if (!worldspacesToMove.Contains(parent.Record.FormKey)) continue;
+
+                        // Edit the placement of the door
+                        DoDoorDisplacement(state, placed);
+                    }
+                    else
+                    {
+                        // Ignore if it is in Tamriel
+                        if (parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
+
+                        // Move the door
+                        DoSimpleMove(state, placed);
+                    }
+
+                    // Counter
+                    nbDoors++;
+
+                    continue;
+                }
 
                 DoSimpleMove(state, placed);
             }
             System.Console.WriteLine("Moved " + nbTotal + " objects (" + nbPersistTotal + " persistent + " + nbTempTotal + " temporary objects)");
+            System.Console.WriteLine("Doors moved: " + nbDoors);
 
             // Reset counters
             nbTotal = 0;
@@ -331,133 +445,6 @@ namespace SRExteriorCitiesPatcher
             System.Console.WriteLine("Moved " + nbTotal + " hazards (" + nbPersistTotal + " persistent + " + nbTempTotal + " temporary hazards)");
             System.Console.WriteLine("Done retrieving placed objects from main plugin!");
 
-            /* --------------------------------------------------- \
-            |                     HANDLE DOORS                     |
-            \ --------------------------------------------------- */
-
-            // Counter
-            int nbDoors = 0;
-
-            // All doors modified by mods modified doors
-            Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter>> srexDoors = new();
-
-            // Only if SR Exterior Cities main plugin is active
-            if (srexModExists)
-            {
-                // Get only SREX modified doors
-                var modsSREXorPatches = state.LoadOrder.PriorityOrder.Where(x => x.ModKey.Equals(srexMain)
-                                                                                 || x.ModKey.FileName.String.Contains("SREX_", StringComparison.Ordinal));
-
-                System.Console.WriteLine("Mapping out SR Exterior Cities (and patches) modified doors");
-                foreach (var obj in modsSREXorPatches.PlacedObject().WinningContextOverrides(cache))
-                {
-                    // Ignore Null
-                    if (obj is null) continue;
-
-                    // Ignore if not a door
-                    obj.Record.Base.TryResolve<IDoorGetter>(state.LinkCache, out var door);
-                    if (door is null) continue;
-
-                    srexDoors.TryAdd(obj.Record.FormKey, obj);
-                }
-                System.Console.WriteLine("Doors modified SREX or its patches): " + srexDoors.Count);
-            }
-
-            // Get only Mod modified doors (exclude vanilla and SREX)
-            var modsWithoutVanillaOrSREX = state.LoadOrder.PriorityOrder.Where(x => !vanillaModKeys.Contains(x.ModKey)
-                                                                                && !x.ModKey.Equals(srexMain)
-                                                                                && !x.ModKey.FileName.String.Contains("SREX_", StringComparison.Ordinal));
-
-
-            System.Console.WriteLine("Moving all doors modified by mods...");
-            foreach (var obj in modsWithoutVanillaOrSREX.PlacedObject().WinningContextOverrides(cache))
-            {
-                // Ignore Null
-                if (obj is null) continue;
-
-                // Ignore if not a door
-                obj.Record.Base.TryResolve<IDoorGetter>(state.LinkCache, out var door);
-                if (door is null) continue;
-
-
-                // Get the parent worldspace
-                obj.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
-                if (parent is null || parent.Record is null) continue;
-
-                // Ignore if it is a blacklisted door (city gates)
-                if (doorsToExclude.Contains(obj.Record.FormKey)) continue;
-
-                // If the door was edited by SREX too
-                if (srexDoors.ContainsKey(obj.Record.FormKey))
-                {
-                    // Only update the placement
-                    srexDoors.TryGetValue(obj.Record.FormKey, out var value);
-                    if (value is null) continue;
-
-                    Placement placement = new();
-                    if (obj.Record.Placement is not null)
-                        placement = new()
-                        {
-                            Position = obj.Record.Placement.Position,
-                            Rotation = obj.Record.Placement.Rotation
-                        };
-
-
-                    EnableParent enableParent = new();
-                    if (obj.Record.EnableParent is not null)
-                        enableParent = new()
-                        {
-                            Flags = obj.Record.EnableParent.Flags,
-                            Reference = obj.Record.EnableParent.Reference.AsSetter(),
-                            Versioning = obj.Record.EnableParent.Versioning
-                        };
-
-                    int majorFlags = obj.Record.MajorRecordFlagsRaw;
-                    SkyrimMajorRecord.SkyrimMajorRecordFlag flags = obj.Record.SkyrimMajorRecordFlags;
-                    IFormLink<ILocationRecordGetter> location = obj.Record.LocationReference.AsSetter();
-
-
-                    var placedState = value.GetOrAddAsOverride(state.PatchMod);
-                    if (placedState is null) continue;
-
-                    // Only alter the placement, flags, Enable Parent, Flags and Location
-                    if (obj.Record.Placement is not null)
-                        placedState.Placement = placement;
-
-                    if (obj.Record.EnableParent is not null)
-                        placedState.EnableParent = enableParent;
-
-                    placedState.MajorRecordFlagsRaw = majorFlags;
-
-                    placedState.SkyrimMajorRecordFlags = flags;
-
-                    if (!location.IsNull)
-                        placedState.LocationReference = location.AsNullable();
-
-                    if(Settings.debug)
-                    {
-                        System.Console.WriteLine("Door found, already modified by SREX");
-                    }
-
-                    // Counter
-                    nbDoors++;
-
-                    continue;
-                }
-                else
-                {
-                    // Ignore if it is in Tamriel
-                    if (parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
-
-                    // Move the door
-                    DoSimpleMove(state, obj);
-
-                    // Counter
-                    nbDoors++;
-                }
-            }
-            System.Console.WriteLine("Doors moved: " + nbDoors);
-            System.Console.WriteLine("Done handling Doors!");
 
             /* =================================================== \\
             || --------------------------------------------------- ||
