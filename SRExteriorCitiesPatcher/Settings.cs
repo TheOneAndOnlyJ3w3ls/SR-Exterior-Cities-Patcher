@@ -13,17 +13,17 @@ namespace SRExteriorCitiesPatcher
 
     public class Settings
     {
-        [SettingName("Enable navmesh modification (Patch makers only))")]
-        [Tooltip("Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the CK")]
-        public bool enableNavmeshEdit = false;
-
-        [SettingName("Copy navmeshes (unticked is very experimental)")]
-        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
-        public bool copyNavmeshes = true;
-
         [SettingName("Ignore Occlusion")]
         [Tooltip("Set to true to ignore all occlusion planes")]
         public bool ignoreOcclusion = true;
+
+        [SettingName("PATCH MAKER ONLY: Enable navmesh modification")]
+        [Tooltip("Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the CK")]
+        public bool enableNavmeshEdit = false;
+
+        [SettingName("PATCH MAKER ONLY: Copy navmeshes (unticked is very experimental)")]
+        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
+        public bool copyNavmeshes = true;
 
         [SettingName("Debug")]
         [Tooltip("Activate all the debug messages")]
