@@ -20,6 +20,8 @@ namespace SRExteriorCitiesPatcher
         internal static IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>? tamrielPersistentCellContext;
         internal static IFormLinkGetter<ICellGetter> tamrielPersistentCell = new FormLink<ICellGetter>(FormKey.Factory("000D74:Skyrim.esm"));
 
+        internal static Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, ICell, ICellGetter>> worldspacesPersistentCellContexts = new();
+
         // SR Exterior Cities main plugin
         internal static ModKey srexMain;
         internal static bool srexModExists = false;
@@ -63,6 +65,15 @@ namespace SRExteriorCitiesPatcher
             FormKey.Factory("01C38B:Skyrim.esm"), // Markarth main gate
         };
 
+
+        private static readonly List<FormKey> persistentWorldspaceCells = new()
+        {
+            FormKey.Factory("016BE0:Skyrim.esm"), // Riften
+            FormKey.Factory("01691F:Skyrim.esm"), // Windhelm
+            FormKey.Factory("037EE6:Skyrim.esm"), // Solitude
+            FormKey.Factory("01A270:Skyrim.esm"), // Whiterun
+            FormKey.Factory("016E02:Skyrim.esm"), // Markarth
+        };
         /**
          * Moves placed objects/NPCs/hazards from the city worldspace to the corresponding Tamriel cell
          */
@@ -86,55 +97,71 @@ namespace SRExteriorCitiesPatcher
                     System.Console.WriteLine("Object found in worldspace!");
 
 
-                // Get the relevant cells
-                if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) return;
-                if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) return;
-
-                // Get the original 
-                var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
-                if (original is null) return;
-
-                // Open/copy the PlacedObject in the patch mod
-                var placedState = placed.GetOrAddAsOverride(state.PatchMod);
-
-
-                // Move persistent objects to the Tamriel Persistent cell
-                if (original.Persistent.Contains(placedState))
+                if (persistentWorldspaceCells.Contains(cell.Record.FormKey))
                 {
-                    if (tamrielPersistentCellContext is null) return;
+                    if(!worldspacesPersistentCellContexts.TryGetValue(cell.Record.FormKey, out var originalCellContext)) return;
 
-                    // Get the Tamriel Persistent cell
-                    var tamPersistCell = tamrielPersistentCellContext.GetOrAddAsOverride(state.PatchMod);
-                    if (tamPersistCell is null) return;
+                    // Get the original 
+                    var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
+                    if (original is null) return;
 
-                    // Remove from the original worldspace cell and move to the Tamriel Persistent cell
-                    original.Persistent.Remove(placedState);
-                    tamPersistCell.Persistent.Add(placedState);
+                    // Open/copy the PlacedObject in the patch mod
+                    var placedState = placed.GetOrAddAsOverride(state.PatchMod);
 
-                    // Count
-                    nbPersistTotal++;
-                    nbTotal++;
+                    // Move persistent objects to the Tamriel Persistent cell
+                    if (original.Persistent.Contains(placedState))
+                    {
+                        if (tamrielPersistentCellContext is null) return;
 
-                    if (Settings.debug)
-                        System.Console.WriteLine("Persistent object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
+                        // Get the Tamriel Persistent cell
+                        var tamPersistCell = tamrielPersistentCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamPersistCell is null) return;
+
+
+                        // Remove from the original worldspace cell and move to the Tamriel Persistent cell
+                        original.Persistent.Remove(placedState);
+                        tamPersistCell.Persistent.Add(placedState);
+
+                        // Count
+                        nbPersistTotal++;
+                        nbTotal++;
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("Persistent object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamPersistCell.FormKey);
+                    }
                 }
-
-                // Move the temporary object to the Tamriel worldspace
-                if (original.Temporary.Contains(placedState))
+                else
                 {
-                    var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
-                    if (tamriel is null) return;
+                    // Get the relevant cells
+                    if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) return;
+                    if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) return;
 
-                    // Remove from the original worldspace cell and move to the corresponding Tamriel cell
-                    original.Temporary.Remove(placedState);
-                    tamriel.Temporary.Add(placedState);
+                    // Get the original 
+                    var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
+                    if (original is null) return;
 
-                    // Count
-                    nbTempTotal++;
-                    nbTotal++;
+                    // Open/copy the PlacedObject in the patch mod
+                    var placedState = placed.GetOrAddAsOverride(state.PatchMod);
 
-                    if (Settings.debug)
-                        System.Console.WriteLine("Temporary object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
+
+
+                    // Move the temporary object to the Tamriel worldspace
+                    if (original.Temporary.Contains(placedState))
+                    {
+                        var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                        if (tamriel is null) return;
+
+                        // Remove from the original worldspace cell and move to the corresponding Tamriel cell
+                        original.Temporary.Remove(placedState);
+                        tamriel.Temporary.Add(placedState);
+
+                        // Count
+                        nbTempTotal++;
+                        nbTotal++;
+
+                        if (Settings.debug)
+                            System.Console.WriteLine("Temporary object moved from " + parent.Record.EditorID + " " + original.Grid?.Point.ToString() + " to " + tamriel.Grid?.Point.ToString());
+                    }
                 }
             }
 
@@ -214,6 +241,23 @@ namespace SRExteriorCitiesPatcher
                 // Filter out interior cells
                 if (cell.Flags.HasFlag(Cell.Flag.IsInteriorCell)) continue;
 
+                // Handle persistent cells in the city worldspaces
+                if (persistentWorldspaceCells.Contains(cell.FormKey)) //cell.MajorFlags.HasFlag(Cell.MajorFlag.Persistent)
+                {
+                    worldspacesPersistentCellContexts.TryAdd(cell.FormKey, cellContext);
+                    continue;
+                }
+
+                // Tamriel Persistent Cell
+                if (tamrielPersistentCellContext is null
+                    && cellContext.Record.FormKey.Equals(tamrielPersistentCell.FormKey))
+                {
+                    tamrielPersistentCellContext = cellContext;
+
+                    System.Console.WriteLine("Found Tamriel persistent cell! " + tamrielPersistentCellContext.Record.FormKey);
+                    continue;
+                }
+
                 // Filter out cells with no Grid
                 if (cell.Grid is null) continue;
 
@@ -223,21 +267,10 @@ namespace SRExteriorCitiesPatcher
                 // Tamriel worldspace
                 if (worldspace.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey))
                 {
-                    // Tamriel Persistent Cell
-                    if (tamrielPersistentCellContext is null
-                        && cellContext.Record.FormKey.Equals(tamrielPersistentCell.FormKey))
-                    {
-                        tamrielPersistentCellContext = cellContext;
+                    bool test = tamrielCellGrids.TryAdd(cell.Grid.Point, cellContext);
 
-                        System.Console.WriteLine("Found Tamriel persistent cell! " + tamrielPersistentCellContext.Record.FormKey);
-                    }
-                    else
-                    {
-                        bool test = tamrielCellGrids.TryAdd(cell.Grid.Point, cellContext);
-
-                        if (Settings.debug && !test)
-                            System.Console.WriteLine("Duplicate cell found at " + cell.Grid.Point.X + "," + cell.Grid.Point.Y);
-                    }
+                    if (Settings.debug && !test)
+                        System.Console.WriteLine("Duplicate cell found at " + cell.Grid.Point.X + "," + cell.Grid.Point.Y);
                 }
                 // Another of the accepted worldspaces
                 else if (worldspacesToMove.Contains(worldspace.FormKey))
