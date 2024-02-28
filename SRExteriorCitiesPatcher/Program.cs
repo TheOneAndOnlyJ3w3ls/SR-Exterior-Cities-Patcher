@@ -226,6 +226,56 @@ namespace SRExteriorCitiesPatcher
             }
         }
 
+
+        internal static void MoveNavmeshDown(IPatcherState<ISkyrimMod, ISkyrimModGetter> state, IModContext<ISkyrimMod, ISkyrimModGetter, INavigationMesh, INavigationMeshGetter> navmeshContext)
+        {
+            // Get parent cell 
+            navmeshContext.TryGetParentSimpleContext<ICellGetter>(out var cell);
+
+            // Ignore null 
+            if (cell is null || cell.Record is null || cell.Record.Grid is null) return;
+            if (navmeshContext is null) return;
+
+            // Get parent worldspace
+            navmeshContext.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
+            if (parent is null || parent.Record is null) return;
+
+            // Worldspaces
+            if (parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey))
+            {
+                if (Settings.debug)
+                    System.Console.WriteLine("Navmesh found in worldspace: " + navmeshContext.Record.FormKey);
+
+
+                if (navmeshContext.Record.Data == null) return;
+
+                // Find the lowest vertices in the navmeshContext
+                float lowest = navmeshContext.Record.Data.Vertices[0].Z;
+                foreach (var NavVertex in navmeshContext.Record.Data.Vertices)
+                {
+                    lowest = (NavVertex.Z < lowest) ? NavVertex.Z : lowest;
+                }
+                lowest += 30000;
+
+
+                // Open/copy the Navmesh in the patch mod
+                var navmeshState = navmeshContext.GetOrAddAsOverride(state.PatchMod);
+                if (navmeshState is null) return;
+
+                // Lower all vertices
+                for (int i = 0; i < navmeshContext.Record.Data.Vertices.Count; i++)
+                {
+                    navmeshState.Data ??= new();
+
+                    var oldPoint = navmeshState.Data.Vertices[i];
+                    P3Float newPoint = new(oldPoint.X, oldPoint.Y, oldPoint.Z-lowest);
+
+                    navmeshState.Data.Vertices[i] = newPoint;
+                }
+            }
+        }
+
+
         /**
          * Fill in dictionaries of the valid cells, both in the city Worldspaces and the corresponding Tamriel cells
          */
@@ -396,6 +446,9 @@ namespace SRExteriorCitiesPatcher
                     continue;
                 }
 
+                // Ignore blacklisted doors
+                if (doorsToExclude.Contains(placed.Record.FormKey)) continue;
+
                 // If SREX is winning the conflict
                 // if (placed.ModKey.Equals(srexMain))
                 if (formKeys.Contains(placed.Record.FormKey)) 
@@ -520,7 +573,61 @@ namespace SRExteriorCitiesPatcher
             /// Navmeshes
             if (Settings.enableNavmeshEdit)
             {
-                foreach (var navmesh in state.LoadOrder.PriorityOrder.NavigationMesh().WinningContextOverrides(state.LinkCache))
+                NavmeshMapping mapping = new();
+
+                Dictionary<FormKey, IModContext<ISkyrimMod, ISkyrimModGetter, INavigationMesh, INavigationMeshGetter>> SREXGridNavmeshes = new();
+
+                // Find all navmeshes by the SREX formIDs
+                foreach (var navmesh in state.LoadOrder.PriorityOrder.Where(x => x.ModKey.Equals(srexMain)).NavigationMesh().WinningContextOverrides(state.LinkCache))
+                {
+                    // Get parent worldspace
+                    navmesh.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
+
+                    // Ignore it the parent is null or if it is not Tamriel
+                    if (parent is null || parent.Record is null || !parent.Record.FormKey.Equals(Skyrim.Worldspace.Tamriel.FormKey)) continue;
+
+                    SREXGridNavmeshes.TryAdd(navmesh.Record.FormKey, navmesh);
+                }
+
+
+                if(Settings.moveNavmeshes)
+                {
+                    // Only consider winning overrides that are in SREX or a patch
+                    var loadorder = state.LoadOrder.PriorityOrder.NavigationMesh().WinningContextOverrides(state.LinkCache)
+                                        .Where(x => /*x.ModKey.Equals(srexMain) || vanillaModKeys.Contains(x.ModKey)*/
+                                                    x.ModKey.Equals(srexMain) || x.ModKey.FileName.String.Contains("SREX AIO", StringComparison.Ordinal));
+
+
+                    Dictionary<Tuple<P2Int, FormKey>, INavigationMesh> originalNavmeshes = new();
+                    Dictionary<Tuple<P2Int, FormKey>, INavigationMesh> srexNavmeshes = new();
+
+
+                    System.Console.WriteLine("Moving existing navmeshes from SREX Main under the map...");
+                    // Move SR Exterior Cities navmeshes down
+                    foreach (var navmesh in loadorder)
+                    {
+                        // Determine if the placed object should be moved
+                        var contexts = state.LinkCache.ResolveAllContexts<IPlaced, IPlacedGetter>(navmesh.Record.FormKey);
+                        var modkeys = contexts.Select(x => x.ModKey).Reverse();
+
+                        // Don't move the vanilla ones
+                        if(vanillaModKeys.Contains(modkeys.First()))
+                        {
+                            continue;
+                        }
+
+                        MoveNavmeshDown(state, navmesh);
+                    }
+                    System.Console.WriteLine("Done moving!");
+                }
+                
+
+
+                // Create a new navmesh from the interior worldspace (or move it)
+                var loadorderForNavmeshes = state.LoadOrder.PriorityOrder.NavigationMesh().WinningContextOverrides(state.LinkCache)
+                    .Where(x => !x.ModKey.Equals(srexMain)  && !x.ModKey.FileName.String.Contains("SREX AIO", StringComparison.Ordinal));
+                foreach (var navmesh in loadorderForNavmeshes)
+                //foreach (var navmesh in state.LoadOrder.PriorityOrder.NavigationMesh().WinningContextOverrides(state.LinkCache))
                 {
                     // Get parent cell 
                     navmesh.TryGetParentSimpleContext<ICellGetter>(out var cell);
@@ -533,86 +640,82 @@ namespace SRExteriorCitiesPatcher
                     navmesh.TryGetParentSimpleContext<IWorldspaceGetter>(out var parent);
                     if (parent is null || parent.Record is null) continue;
 
-                    // Worldspaces
+                    // If the navmesh is in a worldspace to move
                     if (worldspacesToMove.Contains(parent.Record.FormKey))
                     {
                         if (Settings.debug)
                             System.Console.WriteLine("Navmesh found in worldspace: " + navmesh.Record.FormKey);
 
-                        // Get the relevant cells
-                        if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
-                        if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) continue;
+                        
+                        // If the second to last winning mod is vanilla, ignore that navmesh
+                        if (vanillaModKeys.Contains(navmesh.ModKey)) continue;
 
-                        // Get the original 
-                        var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
-                        if (original is null) continue;
-                        var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
-                        if (tamriel is null) continue;
-
-                        // Open/copy the Navmesh in the patch mod
-                        var navmeshState = navmesh.GetOrAddAsOverride(state.PatchMod);
-                        if (navmeshState is null) continue;
-
-
-                        // Make a copy of the navmeshContext and place it in the right worldspace
-                        if (Settings.copyNavmeshes)
+                        // Overwrite SREX navmesh if it exists in the mapping
+                        if (mapping.NavmeshMap.TryGetValue(navmesh.Record.FormKey, out var newFormKeyFromMapping))
                         {
-                            var navcopy = navmeshState.Duplicate(state.PatchMod.GetNextFormKey());
-                            if (navcopy.Data is null || navcopy.Data.Parent is null || original.Grid is null)
-                            {
-                                // Do nothing
-                            }
-                            else
-                            {
-                                // Create a Navmesh parent object
-                                // WARNING: the Y comes first, then X!
-                                P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
+                            // Get the SREX navmesh context
+                            if (!SREXGridNavmeshes.TryGetValue(newFormKeyFromMapping, out var navmeshContext)) continue;
 
-                                WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p, Parent = Skyrim.Worldspace.Tamriel };
-                                navcopy.Data.Parent = tamrielasaparent;
+                            // Get the SREX navmesh to overwrite
+                            var navmeshOverwrite = navmeshContext.GetOrAddAsOverride(state.PatchMod);
+
+                            if (navmeshOverwrite is not null && navmeshOverwrite.Data is not null)
+                            {
+                                var x = navmesh.Record.DeepCopy();
+
+                                var parentWorldspace = navmeshOverwrite.Data.Parent;
+
+                                navmeshOverwrite.Data = x.Data;
+                                if (navmeshOverwrite.Data is not null) 
+                                    navmeshOverwrite.Data.Parent = parentWorldspace;
+
+                                navmeshOverwrite.EditorID = x.EditorID;
+                                navmeshOverwrite.MajorFlags = x.MajorFlags;
+                                navmeshOverwrite.NNAM = x.NNAM;
+                                navmeshOverwrite.ONAM = x.ONAM;
+                                navmeshOverwrite.PNAM = x.PNAM;
+                                navmeshOverwrite.SkyrimMajorRecordFlags = x.SkyrimMajorRecordFlags;
+
+
+                                //if (Settings.debug)
+                                    System.Console.WriteLine("     Navmesh: " + navmeshOverwrite.FormKey + " overwritten by " + navmesh.Record.FormKey);
                             }
+                        }
+
+                        // Otherwise, copy the navmesh as new record
+                        else
+                        {
+                            // Open/copy the Navmesh in the patch mod
+                            var navmeshState = navmesh.GetOrAddAsOverride(state.PatchMod);
+                            if (navmeshState is null) continue;
+
+                            // Make a copy of the navmeshContext and place it in the right worldspace
+                            var navcopy = navmeshState.Duplicate(state.PatchMod.GetNextFormKey());
+                            if (navcopy is null || navcopy.Data is null || navcopy.Data.Parent is null)
+                            {
+                                // Do nothing if null
+                                continue;
+                            }
+
+                            // Create a Navmesh parent object
+                            // WARNING: the Y comes first, then X!
+                            P2Int16 p = new((short)cell.Record.Grid.Point.Y, (short)cell.Record.Grid.Point.X);
+
+                            WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p, Parent = Skyrim.Worldspace.Tamriel };
+                            navcopy.Data.Parent = tamrielasaparent;
+
+
+                            // Get the relevant cells
+                            if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) continue;
+
+                            var tamriel = tamrielCellContext.GetOrAddAsOverride(state.PatchMod);
+                            if (tamriel is null) continue;
 
                             // Add the copy to Tamriel
                             tamriel.NavigationMeshes.Add(navcopy);
 
                             if (Settings.debug)
                                 System.Console.WriteLine("     Navmesh copied, copy placed in Tamriel");
-                        }
-
-                        // Remove from the original worldspace cell and move to the corresponding Tamriel cell
-                        // IMPORTANT NOTE: Currently causes CTDs due to NAVI 
-                        else
-                        {
-
-                            var orgnavmeshes = original.NavigationMeshes;
-                            IEnumerable<NavigationMesh> query =
-                                from nav in orgnavmeshes
-                                where nav.FormKey.Equals(navmesh.Record.FormKey)
-                                select nav;
-                            var navtoremove = query.FirstOrDefault();
-                            if (navtoremove is null) continue;
-
-
-                            if (navtoremove.Data is null || navtoremove.Data.Parent is null || original.Grid is null)
-                            {
-                                // Do nothing
-                            }
-                            else
-                            {
-                                // Create a Navmesh parent object
-                                // WARNING: the Y comes first, then X!
-                                P2Int16 p = new((short)original.Grid.Point.Y, (short)original.Grid.Point.X);
-
-                                WorldspaceNavmeshParent tamrielasaparent = new() { Coordinates = p, Parent = Skyrim.Worldspace.Tamriel };
-                                navtoremove.Data.Parent = tamrielasaparent;
-                            }
-
-                            // Remove from the original, add to Tamriel
-                            original.NavigationMeshes.Remove(navtoremove);
-                            tamriel.NavigationMeshes.Add(navtoremove);
-
-                            if (Settings.debug)
-                                System.Console.WriteLine("     Navmesh removed from parent, moved to Tamriel");
 
                         }
 
@@ -620,10 +723,9 @@ namespace SRExteriorCitiesPatcher
                     }
                 }
 
-                if (Settings.copyNavmeshes)
+                if (Settings.enableNavmeshEdit)
                     System.Console.WriteLine("Copied " + nbTotal + " Navmeshes into the Tamriel worldspace");
-                else
-                    System.Console.WriteLine("Moved " + nbTotal + " Navmeshes into the Tamriel worldspace");
+
             }
             
 

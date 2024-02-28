@@ -21,9 +21,9 @@ namespace SRExteriorCitiesPatcher
         [Tooltip("Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the CK")]
         public bool enableNavmeshEdit = false;
 
-        [SettingName("PATCH MAKER ONLY: Copy navmeshes (unticked is very experimental)")]
-        [Tooltip("Set to true to make copies rather than move navmeshes. False is unsupported/WIP")]
-        public bool copyNavmeshes = true;
+        [SettingName("PATCH MAKER ONLY: Move SREX and patches navmeshes down (experimental)")]
+        [Tooltip("Set to true to move all SREX + patches navmeshes down to -30000.")]
+        public bool moveNavmeshes = false;
 
         [SettingName("Debug")]
         [Tooltip("Activate all the debug messages")]

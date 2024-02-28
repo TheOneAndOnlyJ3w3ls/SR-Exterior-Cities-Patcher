@@ -1,6 +1,6 @@
 {
-    "enableNavmeshEdit": false,
-    "copyNavmeshes": true,
     "ignoreOcclusion": true,
+    "enableNavmeshEdit": false,
+    "moveNavmeshes": false,
     "debug": false
 }
