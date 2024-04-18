@@ -34,7 +34,7 @@ namespace SRExteriorCitiesPatcher
             navmeshMap.TryAdd(FormKey.Factory("0D2996:Skyrim.esm"), FormKey.Factory("000823:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("0FEAE7:Skyrim.esm"), FormKey.Factory("000824:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("05156A:Skyrim.esm"), FormKey.Factory("000825:SR Exterior Cities.esp"));
-            navmeshMap.TryAdd(FormKey.Factory("0FBEF2:Skyrim.esm"), FormKey.Factory("000826:SR Exterior Cities.esp"));
+            navmeshMap.TryAdd(FormKey.Factory("05BEF2:Skyrim.esm"), FormKey.Factory("000826:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("105319:Skyrim.esm"), FormKey.Factory("000827:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("041B98:Skyrim.esm"), FormKey.Factory("000828:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("05156B:Skyrim.esm"), FormKey.Factory("000829:SR Exterior Cities.esp"));
@@ -121,6 +121,8 @@ namespace SRExteriorCitiesPatcher
             navmeshMap.TryAdd(FormKey.Factory("037F7B:Skyrim.esm"), FormKey.Factory("00087A:SR Exterior Cities.esp"));
             navmeshMap.TryAdd(FormKey.Factory("0ECFFB:Skyrim.esm"), FormKey.Factory("00087B:SR Exterior Cities.esp"));
 
+            navmeshMap.TryAdd(FormKey.Factory("0BE45A:Skyrim.esm"), FormKey.Factory("0FA2BC:Skyrim.esm"));
+            navmeshMap.TryAdd(FormKey.Factory("0B325A:Skyrim.esm"), FormKey.Factory("0E2FE0:Skyrim.esm"));
 
         }
 

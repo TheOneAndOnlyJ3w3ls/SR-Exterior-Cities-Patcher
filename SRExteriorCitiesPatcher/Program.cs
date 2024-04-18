@@ -63,6 +63,7 @@ namespace SRExteriorCitiesPatcher
             FormKey.Factory("101D9D:Skyrim.esm"), // Solitude main gate
             FormKey.Factory("037F1B:Skyrim.esm"), // Solitude main gate 2
             FormKey.Factory("01C38B:Skyrim.esm"), // Markarth main gate
+            FormKey.Factory("0383C9:Skyrim.esm"), // Whiterun main gate
         };
 
 
