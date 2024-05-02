@@ -58,12 +58,15 @@ namespace SRExteriorCitiesPatcher
         {
             FormKey.Factory("042283:Skyrim.esm"), // Rften main gate
             FormKey.Factory("042285:Skyrim.esm"), // Rften main gate min use
+            FormKey.Factory("0F795E:Skyrim.esm"), // Rften canal gate 1
+            FormKey.Factory("0E8289:Skyrim.esm"), // Rften canal gate 2
             FormKey.Factory("055FCA:Skyrim.esm"), // Windhelm main gate
             FormKey.Factory("0A17D3:Skyrim.esm"), // Windhelm main gate 2
             FormKey.Factory("101D9D:Skyrim.esm"), // Solitude main gate
             FormKey.Factory("037F1B:Skyrim.esm"), // Solitude main gate 2
             FormKey.Factory("01C38B:Skyrim.esm"), // Markarth main gate
-            FormKey.Factory("0383C9:Skyrim.esm"), // Whiterun main gate
+            FormKey.Factory("0383C9:Skyrim.esm"), // Whiterun main gateway
+            FormKey.Factory("01B1F3:Skyrim.esm"), // Whiterun main gate
         };
 
 
