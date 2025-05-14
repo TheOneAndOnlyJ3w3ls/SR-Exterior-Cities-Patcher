@@ -5,6 +5,11 @@ namespace SRExteriorCitiesPatcher
 
     public class Settings
     {
+        [SettingName("Check Load order correctness")]
+        [Tooltip("Set to true to do a check for the order of your SREX patches")]
+        public bool checkLO = true;
+
+
         [SettingName("Ignore Occlusion")]
         [Tooltip("Set to true to ignore all occlusion planes")]
         public bool ignoreOcclusion = true;

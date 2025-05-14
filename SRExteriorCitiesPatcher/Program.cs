@@ -87,7 +87,7 @@ namespace SRExteriorCitiesPatcher
             placed.TryGetParentSimpleContext<ICellGetter>(out var cell);
 
             // Ignore null 
-            if (cell is null || cell.Record is null || cell.Record.Grid is null) return;
+            if (cell is null || cell.Record is null) return;
             if (placed is null) return;
 
             // Get the parent worldspace
@@ -100,10 +100,9 @@ namespace SRExteriorCitiesPatcher
                 if (Settings.debug)
                     System.Console.WriteLine("Object found in worldspace!");
 
-
                 if (persistentWorldspaceCells.Contains(cell.Record.FormKey))
                 {
-                    if(!worldspacesPersistentCellContexts.TryGetValue(cell.Record.FormKey, out var originalCellContext)) return;
+                    if (!worldspacesPersistentCellContexts.TryGetValue(cell.Record.FormKey, out var originalCellContext)) return;
 
                     // Get the original 
                     var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
@@ -136,9 +135,15 @@ namespace SRExteriorCitiesPatcher
                 }
                 else
                 {
+                    // Ignore if the cell grid is null
+                    if (cell.Record.Grid is null) return;
+
                     // Get the relevant cells
                     if (!tamrielCellGrids.TryGetValue(cell.Record.Grid.Point, out var tamrielCellContext)) return;
                     if (!originalCellGrid.TryGetValue(new Tuple<P2Int, FormKey>(cell.Record.Grid.Point, cell.Record.FormKey), out var originalCellContext)) return;
+
+                    // Ignore cell 0,0 objects
+                    if (cell.Record.Grid.Point.IsZero) return;
 
                     // Get the original 
                     var original = originalCellContext.GetOrAddAsOverride(state.PatchMod);
@@ -191,7 +196,6 @@ namespace SRExteriorCitiesPatcher
                     Position = door.Record.Placement.Position,
                     Rotation = door.Record.Placement.Rotation
                 };
-
 
             EnableParent enableParent = new();
             if (door.Record.EnableParent is not null)
@@ -285,7 +289,11 @@ namespace SRExteriorCitiesPatcher
          */
         internal static void DoWorldspaceMapping(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
-            foreach (var cellContext in state.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(state.LinkCache))
+            if (state == null) return;
+
+            var cache = state.LinkCache;
+
+            foreach (var cellContext in state.LoadOrder.PriorityOrder.Cell().WinningContextOverrides(cache))
             {
                 // Ignore null
                 if (cellContext is null || cellContext.Record is null) continue;
@@ -338,6 +346,74 @@ namespace SRExteriorCitiesPatcher
         }
 
 
+        /**
+         * Check for records already handled in the previous patch plugin
+         */
+        internal static bool CheckAlreadyPatched(IPatcherState<ISkyrimMod, ISkyrimModGetter> state,
+                                                    IModContext<ISkyrimMod, ISkyrimModGetter, IPlaced, IPlacedGetter> placed,
+                                                    ILinkCache cache)
+        {
+            // Get all contexts for that placed object
+            var allContexts = cache.ResolveAllSimpleContexts<IPlacedGetter>(placed.Record.FormKey);
+
+            // Skip the patch mod and get the first context before the patch mod that modified the record
+            var firstRecord = allContexts.Skip(1).First();
+
+            // If the last override isn't a patch or SREX, ignore it
+            if (!firstRecord.ModKey.FileName.String.Contains("SREX AIO -") && !firstRecord.ModKey.FileName.String.Contains("SR Exterior Cities")) return false;
+
+            // Try to get the actual mod from the ESP name
+            if (state.LoadOrder.TryGetValue(firstRecord.ModKey.FileName.String, out var lastoverride))
+            {
+                if (lastoverride.Mod is null) return false;
+
+                if (Settings.debug)
+                    System.Console.WriteLine("last override is: " + lastoverride.FileName);
+
+                // Get all masters from the last override
+                List<String> masters = new();
+                foreach (var mod in lastoverride.Mod.ModHeader.MasterReferences)
+                {
+                    masters.Add(mod.Master.Name.ToLower());
+                    //System.Console.WriteLine("master: " + mod.Master.Name.ToLower());
+                }
+
+                // Ignore if there are only 2 masters, patch mod + original record (record is a new mod added record with no other override)
+                if (allContexts.Count() <= 2)
+                {
+                    return false;
+                }
+
+                // Find the last overriding context that isn't SREX or a SREX patch
+                // Skip the patch mod and the last override
+                foreach (var context in allContexts.Skip(2)) 
+                {
+                    //System.Console.Write("    record was previously edited by: " + context.ModKey.Name.ToLower());
+                    if (!context.ModKey.Name.ToLower().Contains("SREX AIO") && !context.ModKey.Name.ToLower().Contains("SR Exterior Cities"))
+                    {
+                        //System.Console.Write(" (this one is not a SREX patch) ");
+
+                        // If the last override before SREX is a master to the last patch
+                        if (masters.Contains(context.ModKey.Name.ToLower()))
+                        {
+                            // System.Console.Write(" and it was found as a master of the last override\n");
+
+                            // Remove the record from the patch mod
+                            return true;
+                        }
+                        // Otherwise, leave it, the record was modified
+                        else
+                        {
+                            //Do nothing
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            return false;
+        }
+
 
         /* =================================================== \\
         || --------------------------------------------------- ||
@@ -361,14 +437,13 @@ namespace SRExteriorCitiesPatcher
 
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
-
             /* --------------------------------------------------- \
             |                   INITIALISATION                     |
             \ --------------------------------------------------- */
 
             /// Variables and initialisation
             // Create a link cache
-            ILinkCache cache = state.LinkCache;
+            ILinkCache cache = state.LoadOrder.ToImmutableLinkCache();//state.LinkCache;
 
 
             // Try to get the main mod
@@ -399,6 +474,77 @@ namespace SRExteriorCitiesPatcher
                 formKeys.Add(fl.FormKey);
             }
 
+            if (Settings.checkLO)
+            {
+                LinkedList<String> AllSREXMasters = new();
+                System.Console.WriteLine("Checking SREX patch order...");
+                foreach (var mod in state.LoadOrder.ListedOrder)
+                {
+                    // Ignore if not a patch
+                    if (!mod.FileName.Contains("SREX AIO - ")) continue;
+                    if(mod is null) continue;
+                    if(mod.Mod is null) continue;
+
+                    foreach (var master in mod.Mod.ModHeader.MasterReferences)
+                    {
+                        if (vanillaModKeys.Contains(master.Master)) continue;
+                        if (master.Master.FileName.String.Contains("SR Exterior Cities")) continue;
+                        if (master.Master.FileName.String.Contains("ccqdrsse001-survivalmode")) continue;
+                        if (master.Master.FileName.String.Contains("ccbgssse037-curios")) continue;
+
+                        if (!AllSREXMasters.Contains(master.Master.FileName.String.ToLower()))
+                        {
+                            if(Settings.debug)
+                                System.Console.WriteLine("Master: " + master.Master.FileName);
+
+                            AllSREXMasters.AddLast(master.Master.FileName.String.ToLower());
+                        }
+                    }
+                }
+
+
+
+                int i = 0;
+                foreach (string modStr in AllSREXMasters)
+                {
+                    int j = 0;
+                    if (state.LoadOrder.TryGetValue(modStr, out var tmpMod))
+                    {
+                        j = state.LoadOrder.ListedOrder.IndexOf(tmpMod);
+                        if(Settings.debug)
+                            System.Console.WriteLine(modStr + " is at index " + j + " and i = " + i);
+
+                        if (j >= i)
+                        {
+                            i = j;
+                        }
+                        else
+                        {
+                            System.Console.WriteLine("");
+                            System.Console.WriteLine("WARNING! Potential load order issue detected among SREX patches!");
+                            System.Console.WriteLine("Load order recommendation: move patches to fit the order of the mods they patch.");
+                            System.Console.Write("Mod A.esp\n" +
+                                "Mod B\n" +
+                                "Mod C\n" +
+                                "SR Exterior Cities.esp\n" +
+                                "SREX AIO - Mod A.esp\n" +
+                                "SREX AIO - Mod B.esp\n" +
+                                "SREX AIO - Mod C.esp\n");
+                            System.Console.WriteLine("");
+
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        System.Console.WriteLine("CRITICAL ERROR! Detected missing mod required by SREX patch: " + modStr + ". " +
+                            "Remove patches for mods you do not have from your load order.");
+                        return;
+                    }
+                }
+            }
+
+
             if (Settings.debug)
                 System.Console.WriteLine("Found formkeys in srex: " + formKeys.Count);
 
@@ -421,12 +567,12 @@ namespace SRExteriorCitiesPatcher
             IEnumerable<IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedObject, IPlacedObjectGetter>> loadOrderToConsiderForObjects;
             IEnumerable<IModContext<ISkyrimMod, ISkyrimModGetter, IPlacedNpc, IPlacedNpcGetter>> loadOrderToConsiderForNPCs;
             IEnumerable<IModContext<ISkyrimMod, ISkyrimModGetter, IAPlacedTrap, IAPlacedTrapGetter>> loadOrderToConsiderForHazards;
-            
+
             var modsWithoutSREXPatches = state.LoadOrder.PriorityOrder.Where(x => !x.ModKey.FileName.String.Contains("SREX AIO", StringComparison.Ordinal));
 
-            loadOrderToConsiderForObjects = modsWithoutSREXPatches.PlacedObject().WinningContextOverrides(state.LinkCache);
-            loadOrderToConsiderForNPCs = modsWithoutSREXPatches.PlacedNpc().WinningContextOverrides(state.LinkCache);
-            loadOrderToConsiderForHazards = modsWithoutSREXPatches.APlacedTrap().WinningContextOverrides(state.LinkCache);
+            loadOrderToConsiderForObjects = modsWithoutSREXPatches.PlacedObject().WinningContextOverrides(cache);
+            loadOrderToConsiderForNPCs = modsWithoutSREXPatches.PlacedNpc().WinningContextOverrides(cache);
+            loadOrderToConsiderForHazards = modsWithoutSREXPatches.APlacedTrap().WinningContextOverrides(cache);
 
             // Exclude the main plugin too
             loadOrderToConsiderForObjects = state.LoadOrder.PriorityOrder
@@ -564,6 +710,7 @@ namespace SRExteriorCitiesPatcher
             }
             System.Console.WriteLine("All done moving Hazards!");
             System.Console.WriteLine("Moved " + nbTotal + " hazards (" + nbPersistTotal + " persistent + " + nbTempTotal + " temporary hazards)");
+
 
 
             /* =================================================== \\
@@ -734,6 +881,62 @@ namespace SRExteriorCitiesPatcher
             
 
             System.Console.WriteLine("All done patching!");
+
+            /* =================================================== \\
+            || --------------------------------------------------- ||
+            ||                                                     ||
+            ||                       CLEANUP                       ||
+            ||                                                     ||
+            || --------------------------------------------------- ||
+            \\ =================================================== */
+
+            System.Console.WriteLine("Cleaning up records already properly handled in SREX patches...");
+            HashSet<FormKey> objectsToRemove = new HashSet<FormKey>(); 
+            foreach (var placed in state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache))
+            {
+                // Ignore null
+                if (placed is null) continue;
+                // Only consider records in the patch mod
+                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) continue;
+
+                // Remove stuff already patched
+                if (CheckAlreadyPatched(state, placed, cache))
+                {
+                    objectsToRemove.Add(placed.Record.FormKey);
+                }
+            }
+            foreach (var placed in state.LoadOrder.PriorityOrder.PlacedNpc().WinningContextOverrides(cache))
+            {
+                // Ignore null
+                if (placed is null) continue;
+                // Only consider records in the patch mod
+                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) continue;
+
+                if (CheckAlreadyPatched(state, placed, cache))
+                {
+                    objectsToRemove.Add(placed.Record.FormKey);
+                }
+            }
+            foreach (var placed in state.LoadOrder.PriorityOrder.APlacedTrap().WinningContextOverrides(cache))
+            {
+                // Ignore null
+                if (placed is null) continue;
+                // Only consider records in the patch mod
+                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) continue;
+
+                if (CheckAlreadyPatched(state, placed, cache))
+                {
+                    objectsToRemove.Add(placed.Record.FormKey);
+                }
+            }
+            System.Console.WriteLine("Found all records already handled in SREX patches! Total count to remove: " + objectsToRemove.Count);
+
+            foreach (var o in objectsToRemove)
+            {
+                state.PatchMod.Remove<IPlaced>(o);
+            }
+
+            System.Console.WriteLine("Done!");
         }
     }
 }

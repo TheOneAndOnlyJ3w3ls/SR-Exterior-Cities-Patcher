@@ -1,4 +1,5 @@
 {
+    "checkLO": true,
     "ignoreOcclusion": true,
     "enableNavmeshEdit": false,
     "moveNavmeshes": false,
