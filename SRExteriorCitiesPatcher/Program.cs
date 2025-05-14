@@ -936,6 +936,27 @@ namespace SRExteriorCitiesPatcher
                 state.PatchMod.Remove<IPlaced>(o);
             }
 
+            System.Console.WriteLine("Fixing door links");
+            foreach (var placed in state.LoadOrder.PriorityOrder.Where(x => x.ModKey == state.PatchMod.ModKey).PlacedObject().WinningContextOverrides(cache))
+            {
+                if (placed is null) continue;
+
+                var door = placed.Record.Base.TryResolve<IDoorGetter>(cache);
+                if (door is null) continue;
+
+                var placedState = placed.GetOrAddAsOverride(state.PatchMod);
+                if (placedState.NavigationDoorLink is null) continue;
+
+                NavmeshMapping mapping = new();
+                if (mapping.NavmeshMap.TryGetValue(placedState.NavigationDoorLink.NavMesh.FormKey, out var newNavmesh))
+                {
+                    if(cache.TryResolve<INavigationMeshGetter>(newNavmesh, out var nav))
+                    {
+                        placedState.NavigationDoorLink.NavMesh = nav.ToLink();
+                    }
+                }
+            }
+
             System.Console.WriteLine("Done!");
         }
     }
