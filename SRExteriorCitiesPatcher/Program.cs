@@ -1,12 +1,15 @@
-using Noggog;
 using DynamicData;
 using Mutagen.Bethesda;
-using Mutagen.Bethesda.Synthesis;
-using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.FormKeys.SkyrimSE;
 using Mutagen.Bethesda.Plugins;
-using Mutagen.Bethesda.Plugins.Records;
+using Mutagen.Bethesda.Plugins.Analysis;
 using Mutagen.Bethesda.Plugins.Cache;
+using Mutagen.Bethesda.Plugins.Records;
+using Mutagen.Bethesda.Plugins.Utility;
+using Mutagen.Bethesda.Skyrim;
+using Mutagen.Bethesda.Synthesis;
+using Noggog;
+using System.Collections.Concurrent;
 
 namespace SRExteriorCitiesPatcher
 {
@@ -353,14 +356,15 @@ namespace SRExteriorCitiesPatcher
                                                     IModContext<ISkyrimMod, ISkyrimModGetter, IPlaced, IPlacedGetter> placed,
                                                     ILinkCache cache)
         {
-            // Get all contexts for that placed object
-            var allContexts = cache.ResolveAllSimpleContexts<IPlacedGetter>(placed.Record.FormKey);
+            // Get the first 2 contexts for that placed object
+            var allContexts = cache.ResolveAllSimpleContexts<IPlacedGetter>(placed.Record.FormKey).Take(2);
 
             // Skip the patch mod and get the first context before the patch mod that modified the record
             var firstRecord = allContexts.Skip(1).First();
 
-            // If the last override isn't a patch or SREX, ignore it
+            // If the last override isn't a patch or SREX, ignore it, synthesis patched it first (mod added object)
             if (!firstRecord.ModKey.FileName.String.Contains("SREX AIO -") && !firstRecord.ModKey.FileName.String.Contains("SR Exterior Cities")) return false;
+
 
             // Try to get the actual mod from the ESP name
             if (state.LoadOrder.TryGetValue(firstRecord.ModKey.FileName.String, out var lastoverride))
@@ -370,18 +374,21 @@ namespace SRExteriorCitiesPatcher
                 if (Settings.debug)
                     System.Console.WriteLine("last override is: " + lastoverride.FileName);
 
-                // Get all masters from the last override
+                // Retrieve ALL mod contexts
+                allContexts = cache.ResolveAllSimpleContexts<IPlacedGetter>(placed.Record.FormKey);
+
+                // Ignore if there are only 2 masters, patch mod + original record (record is from a new mod that hasn't been patched until synthesis)
+                if (allContexts.Count() <= 2)
+                {
+                    return false;
+                }
+
+                // Get the list of masters from the last override
                 List<String> masters = new();
                 foreach (var mod in lastoverride.Mod.ModHeader.MasterReferences)
                 {
                     masters.Add(mod.Master.Name.ToLower());
                     //System.Console.WriteLine("master: " + mod.Master.Name.ToLower());
-                }
-
-                // Ignore if there are only 2 masters, patch mod + original record (record is a new mod added record with no other override)
-                if (allContexts.Count() <= 2)
-                {
-                    return false;
                 }
 
                 // Find the last overriding context that isn't SREX or a SREX patch
@@ -890,8 +897,87 @@ namespace SRExteriorCitiesPatcher
             || --------------------------------------------------- ||
             \\ =================================================== */
 
-            System.Console.WriteLine("Cleaning up records already properly handled in SREX patches...");
-            HashSet<FormKey> objectsToRemove = new HashSet<FormKey>(); 
+            if (Settings.checkPatches)
+            {
+                System.Console.WriteLine("Cleaning up records already properly handled in SREX patches...");
+
+                ConcurrentBag<FormKey> objectsToRemove = new ConcurrentBag<FormKey>();
+                ConcurrentBag<FormKey> npcsToRemove = new ConcurrentBag<FormKey>();
+                ConcurrentBag<FormKey> trapsToRemove = new ConcurrentBag<FormKey>();
+
+                Action[] loops = new Action[]
+                {
+                    () =>
+                    {
+                        Parallel.ForEach(state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache),
+                            placed =>
+                            {
+                                // Ignore null
+                                if (placed is null) return;
+
+                                // Only consider records in the patch mod
+                                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) return;
+
+                                // Remove stuff already patched
+                                if (CheckAlreadyPatched(state, placed, cache))
+                                    objectsToRemove.Add(placed.Record.FormKey);
+                            });
+                    },
+                    () =>
+                    {
+                        Parallel.ForEach(state.LoadOrder.PriorityOrder.PlacedNpc().WinningContextOverrides(cache),
+                            placed =>
+                            {
+                                // Ignore null
+                                if (placed is null) return;
+
+                                // Only consider records in the patch mod
+                                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) return;
+
+                                // Remove stuff already patched
+                                if (CheckAlreadyPatched(state, placed, cache))
+                                    npcsToRemove.Add(placed.Record.FormKey);
+                            });
+                    },
+                    () =>
+                    {
+                        Parallel.ForEach(state.LoadOrder.PriorityOrder.APlacedTrap().WinningContextOverrides(cache),
+                            placed =>
+                            {
+                                // Ignore null
+                                if (placed is null) return;
+
+                                // Only consider records in the patch mod
+                                if (!placed.ModKey.Equals(state.PatchMod.ModKey)) return;
+
+                                // Remove stuff already patched
+                                if (CheckAlreadyPatched(state, placed, cache))
+                                    trapsToRemove.Add(placed.Record.FormKey);
+                            });
+                    }
+                };
+
+                // Run the threads concurrently
+                Parallel.Invoke(loops);
+
+                // Merge the results
+                HashSet<FormKey> recordsToRemove = new HashSet<FormKey>();
+                recordsToRemove.UnionWith(objectsToRemove);
+                recordsToRemove.UnionWith(npcsToRemove);
+                recordsToRemove.UnionWith(trapsToRemove);
+
+
+                // Remove the records from the patch
+                foreach (var o in recordsToRemove)
+                {
+                    state.PatchMod.Remove<IPlaced>(o);
+                }
+                System.Console.WriteLine("Found all records already handled in SREX patches! Total count to remove: " + recordsToRemove.Count);
+
+            }
+
+            /*
+            HashSet<FormKey> objectsToRemove = new HashSet<FormKey>();  
             foreach (var placed in state.LoadOrder.PriorityOrder.PlacedObject().WinningContextOverrides(cache))
             {
                 // Ignore null
@@ -928,13 +1014,8 @@ namespace SRExteriorCitiesPatcher
                 {
                     objectsToRemove.Add(placed.Record.FormKey);
                 }
-            }
-            System.Console.WriteLine("Found all records already handled in SREX patches! Total count to remove: " + objectsToRemove.Count);
+            }*/
 
-            foreach (var o in objectsToRemove)
-            {
-                state.PatchMod.Remove<IPlaced>(o);
-            }
 
             System.Console.WriteLine("Fixing door links");
             foreach (var placed in state.LoadOrder.PriorityOrder.Where(x => x.ModKey == state.PatchMod.ModKey).PlacedObject().WinningContextOverrides(cache))

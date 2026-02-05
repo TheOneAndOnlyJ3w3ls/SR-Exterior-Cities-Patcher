@@ -17,36 +17,68 @@ Capital cities
 Legacy of the Dragonborn's museum in solitude
 etc.
 
- Any other mod can be patched without any further work (examples include but are not limited to: Lux Orbis, Lux Orbis Master, free CC mods, ...)
+Any other mod can be patched without any further work (examples include but are not limited to: Lux Orbis, Lux Orbis Master, free CC mods, ...)
 
 HOWEVER: Patchmakers can also make use of the navmesh functionalities. 
-It cannot currently automatically resolve all navmesh issues. It can however make a copy of the navmesh in the city worldspace and place it in the Tamriel worldspace, at the correct place. This can simplify the process a lot, as all there is left to do is to connect the navmesh at the city gates, possibly link to (or delete) the navmesh from the main mod, and finalize the navmesh.
+It cannot currently automatically resolve all navmesh issues. It can however prepare navmeshes for finalization in the Creation Kit. This can simplify the process a lot, as all there is left to do is to potentially connect the navmesh at the city gates and finalize the navmesh.
 
-Important note: the next update of SR Exterior Cities will allow me to improve on the process a lot, basically simplifying the work immensely.
-
+The patcher can also detect existing patches in the user's load order, to avoid any duplicates.
 
 # Detailed navmesh patching instructions:
 
-0. Heavily recommended: only enable the mod/mods you want to patch and SR Exterior Cities.esp
-1. Tick the "Enable Navmesh modification" setting
-2. Leave the copy navmeshes ticked
-3. Run the patcher
-4. Change the ID of the copied navmeshes in xEdit so that they match the ID in SR Exterior Cities.esp (this will hopefully be done automatically soon)
-5. Open the Creation Kit, load your newly made patch
-5. For each worldspace: remove the navmeshes you don't need (ONLY from the newly created ones! It will cause crashes otherwise!), or move the SR Exterior Cities navmesh way lower so they don't confuse NPCs (See this tutorial: Navmesh Cutting (by Darkfox127) for detailed instructions)
-6. If needed, connect the navmeshes at the city gates
-7. Finalize the navmesh
-8. Save your patch, it is done! The CK will automatically generate the NAVI for you.
-9. Test ingame
-10. Share your patch (on SRider's discord, if you like, so that it can be used in the patch hub)
+BEFORE YOU START: Your load order should be ONLY the vanilla files (no CC!!!), the mod(s) you want to patch and then SR Exterior Cities.esp (and any SREX patch required if you are making a combo patch of several mods).
+
+1. Run Synthesis
+
+- Make a separate group with the SR Exterior Cities Patcher and optionally the SynSetESL patcher below it. Call it "SREX AIO - Modname Patch" (exactly like this, do not replace "modname" with the actual mod's name at this stage). This step only needs to be done once, you can then use that setup to make multiple patches one after the other.
+- In the settings of the patcher, tick the "PATCH MAKER ONLY: Enable navmesh modification" option, do not touch the other options.
+- Run the patcher, close synthesis.
+- Close synthesis and rename the patch according to our naming convention (replace Modname with the mod's name)
+
+
+2. Run xEdit QuickAutoClean on it
+
+3. Open the patch in xEdit (with all mods you have loaded like described in "before you start")
+
+- Run the compress script on the plugin
+- Run "Remove identical to previous override" on it.
+- Save.
+- Recommended: apply a filter for NAVM (middle column), to identify which cells have a navmesh record in them. Mark them down for the next step
+
+
+4. Open the Creation Kit (CK), load up the patch as active
+
+- go to each cell where a navmesh was edited, and visually check that the navmeshes look good and that there is no overlap. If there is an overlap, that needs more work, please notify us
+- Open the navmesh tool. Finalize, save. Finalize a second time, save.
+- Do this for every cell where a navmesh was edited!
+- Double check visually that everything looks good. Some mods (like capital and JK) add stuff in the Tamriel worldspace that may end up clipping or looking weird. Delete those (next step is absolutely crucial if you do that, in order to properly disable those objects instead of deleting them)
+
+
+5. Run xEdit QAC again
+
+6. Open the patch again in xEdit
+
+- check everything looks okay.
+- Add the partial form flags to the Tamriel persistent cell (always) and Tamriel worldspace (IF the mod doesn't edit the max height data etc, I'm not 100% sure myself)
+- Delete the city worldspaces if there are any left.
+- Right click on the plugin > Add Masters... > select all vanilla files (and individual patches when making combo patches), then Sort Masters to match load order
+- In the header, add your name to the author field
+- In the header, add the version of SR and that of the mod you're patching for in the description field
+- Use 7zip to make it a .7z file, and post it in SRider's discord, in the #⁠⁠community-patches channel.
+
+
+7. We'll review/QA it and add it to the next patch hub iteration, thank you for your contribution! 
 
 
 # Settings:
-
--enableNavmeshEdit: Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the Creation Kit.
-
--copyNavmeshes: Set to true to make copies rather than move navmeshes. False is unsupported/WIP
+-checkLO: Set to true to do a quick check for the order of your SREX patches
 
 -ignoreOcclusion: don't move any occlusion panes, recommended to turn on to avoid conflicts of occlusion (those can cause CTD).
+
+-checkPatches: Set to true to remove all records already patched in the SREX patch hub (takes longer but will produce a cleaner patch). Only turn off if you know how to clean those in xEdit yourself.
+
+-enableNavmeshEdit: PATCH MAKER ONLY: Enable navmesh modification. Recommended for patch makers only, will need a run in the CK"
+
+-moveNavmeshes:PATCH MAKER ONLY: move all SREX + patches navmeshes down to -30000 (experimental)
 
 -debug: Leave it off, it's just for me to display some additional information.

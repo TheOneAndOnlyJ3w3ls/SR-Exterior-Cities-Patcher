@@ -1,6 +1,7 @@
 {
     "checkLO": true,
     "ignoreOcclusion": true,
+    "checkPatches": true,
     "enableNavmeshEdit": false,
     "moveNavmeshes": false,
     "debug": false

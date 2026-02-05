@@ -14,6 +14,10 @@ namespace SRExteriorCitiesPatcher
         [Tooltip("Set to true to ignore all occlusion planes")]
         public bool ignoreOcclusion = true;
 
+        [SettingName("Clean already patched records")]
+        [Tooltip("Set to true to remove all records already patched in the SREX patch hub (takes longer but will produce a cleaner patch). Only turn off if you know how to clean those in xEdit yourself.")]
+        public bool checkPatches = true;
+
         [SettingName("PATCH MAKER ONLY: Enable navmesh modification")]
         [Tooltip("Set to true to make navmeshes edits. Recommended for patch makers only, will need a run in the CK")]
         public bool enableNavmeshEdit = false;
