@@ -1,12 +1,12 @@
+using Noggog;
+using DynamicData;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Synthesis;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.FormKeys.SkyrimSE;
-using Mutagen.Bethesda.Plugins.Cache;
 using Mutagen.Bethesda.Plugins;
-using Noggog;
 using Mutagen.Bethesda.Plugins.Records;
-using DynamicData;
+using Mutagen.Bethesda.Plugins.Cache;
 
 namespace SRExteriorCitiesPatcher
 {
@@ -208,7 +208,7 @@ namespace SRExteriorCitiesPatcher
 
             int majorFlags = door.Record.MajorRecordFlagsRaw;
             SkyrimMajorRecord.SkyrimMajorRecordFlag flags = door.Record.SkyrimMajorRecordFlags;
-            IFormLink<ILocationRecordGetter> location = door.Record.LocationReference.AsSetter();
+            IFormLink<ILocationGetter> location = door.Record.LocationReference.AsSetter();
 
 
             var placedState = value.GetOrAddAsOverride(state.PatchMod);
